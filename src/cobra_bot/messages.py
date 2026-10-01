@@ -13,6 +13,9 @@ COBRA_UNAVAILABLE = "Cobra is unavailable, try again later."
 NOT_STARTED = "Tournament has not started yet."
 TOP_CUT_NOT_SUPPORTED = "Top cut is not supported yet."
 NO_PLAYERS_MATCH = "No players match."
+UNKNOWN_COMMAND = "Unknown command."
+INTERNAL_ERROR = "Something went wrong. Please try again later."
+COBRA_DATA_UNREADABLE = "Cobra returned data the bot cannot read."
 
 
 def round_out_of_range(requested: int, last_round: int) -> str:
