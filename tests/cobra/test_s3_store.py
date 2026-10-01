@@ -1,6 +1,6 @@
 import io
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3  # type: ignore[import-untyped]  # dev dependency without stubs
@@ -90,3 +90,82 @@ def test_put(s3: tuple[Any, Stubber]) -> None:
     )
 
     S3CacheStore(client, BUCKET).put(KEY, b'{"a": 1}', FETCHED)
+
+
+# --- single-flight lock (T17) ---------------------------------------------------------
+
+LOCK = "locks/4909"
+NOW = datetime(2026, 10, 1, 12, 0, 30, tzinfo=UTC)
+NOW_EPOCH = b"1790856030"
+ABANDONED_AFTER = timedelta(seconds=15)
+
+
+def _conflict(stubber: Stubber, code: str = "PreconditionFailed") -> None:
+    stubber.add_client_error(
+        "put_object", service_error_code=code, http_status_code=412
+    )
+
+
+def test_lock_is_created_with_if_none_match(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    stubber.add_response(
+        "put_object",
+        {},
+        {"Bucket": BUCKET, "Key": LOCK, "Body": NOW_EPOCH, "IfNoneMatch": "*"},
+    )
+
+    assert S3CacheStore(client, BUCKET).acquire_lock(LOCK, NOW, ABANDONED_AFTER)
+
+
+def test_recent_lock_is_held_elsewhere(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    _conflict(stubber)
+    stubber.add_response(
+        "get_object",
+        {"Body": _body(b"1790856020"), "ETag": '"abc"'},  # taken 10 s ago
+        {"Bucket": BUCKET, "Key": LOCK},
+    )
+
+    assert not S3CacheStore(client, BUCKET).acquire_lock(LOCK, NOW, ABANDONED_AFTER)
+
+
+def test_abandoned_lock_is_replaced_with_if_match(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    _conflict(stubber)
+    stubber.add_response(
+        "get_object",
+        {"Body": _body(b"1790856000"), "ETag": '"abc"'},  # 30 s ago
+    )
+    stubber.add_response(
+        "put_object",
+        {},
+        {"Bucket": BUCKET, "Key": LOCK, "Body": NOW_EPOCH, "IfMatch": '"abc"'},
+    )
+
+    assert S3CacheStore(client, BUCKET).acquire_lock(LOCK, NOW, ABANDONED_AFTER)
+
+
+def test_losing_the_takeover_race(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    _conflict(stubber)
+    stubber.add_response("get_object", {"Body": _body(b"1790856000"), "ETag": '"a"'})
+    _conflict(stubber)
+
+    assert not S3CacheStore(client, BUCKET).acquire_lock(LOCK, NOW, ABANDONED_AFTER)
+
+
+def test_lock_released_between_calls(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    _conflict(stubber, "ConditionalRequestConflict")
+    stubber.add_client_error(
+        "get_object", service_error_code="NoSuchKey", http_status_code=404
+    )
+
+    assert not S3CacheStore(client, BUCKET).acquire_lock(LOCK, NOW, ABANDONED_AFTER)
+
+
+def test_release_deletes_the_lock(s3: tuple[Any, Stubber]) -> None:
+    client, stubber = s3
+    stubber.add_response("delete_object", {}, {"Bucket": BUCKET, "Key": LOCK})
+
+    S3CacheStore(client, BUCKET).release_lock(LOCK)

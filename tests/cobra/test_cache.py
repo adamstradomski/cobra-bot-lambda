@@ -8,6 +8,7 @@ from cobra_bot.cobra.cache import (
     CacheResult,
     InMemoryCacheStore,
     TournamentCache,
+    lock_key,
     shortcode_key,
     tournament_key,
 )
@@ -56,6 +57,12 @@ class BrokenStore:
         raise OSError("S3 down")
 
     def put(self, key: str, body: bytes, fetched_at: datetime) -> None:
+        raise OSError("S3 down")
+
+    def acquire_lock(self, key: str, now: datetime, abandoned_after: timedelta) -> bool:
+        raise OSError("S3 down")
+
+    def release_lock(self, key: str) -> None:
         raise OSError("S3 down")
 
 
@@ -214,3 +221,120 @@ def test_corrupt_shortcode_entry_is_ignored() -> None:
 
     with pytest.raises(Private):
         cache.shortcode("QNSF")
+
+
+# --- single-flight (T17, NFR-03) ----------------------------------------------------
+
+
+class SleepingClock(FakeClock):
+    """A clock whose sleep advances time and can run a hook on each call."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sleeps = 0
+        self.on_sleep: list[object] = []
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps += 1
+        self.advance(seconds)
+        for hook in self.on_sleep:
+            hook(self)  # type: ignore[operator]
+
+
+def _single_flight(
+    fetcher: FakeFetcher, store: InMemoryCacheStore
+) -> tuple[TournamentCache, SleepingClock]:
+    clock = SleepingClock()
+    return TournamentCache(store, fetcher, clock, sleep=clock.sleep), clock
+
+
+def _locked_store(cached_minutes_ago: int | None = 10) -> InMemoryCacheStore:
+    store = (
+        _with_old_entry(cached_minutes_ago)
+        if cached_minutes_ago is not None
+        else InMemoryCacheStore()
+    )
+    store.locks[lock_key(1)] = T0  # another worker is fetching right now
+    return store
+
+
+def test_ac18_waiting_caller_gets_fresh_object_without_http() -> None:
+    store = _locked_store()
+    fetcher = FakeFetcher()
+    cache, clock = _single_flight(fetcher, store)
+
+    def winner_finishes(c: SleepingClock) -> None:
+        if c.sleeps == 2:
+            store.put(tournament_key(1), FRESH, c.now)
+
+    clock.on_sleep.append(winner_finishes)
+
+    result = cache.tournament(1)
+
+    assert fetcher.calls == []
+    assert (result.body, result.stale) == (FRESH, False)
+    assert clock.now - T0 <= timedelta(seconds=2)
+
+
+def test_lock_held_and_nothing_new_serves_older_copy_after_2_s() -> None:
+    fetcher = FakeFetcher()
+    cache, clock = _single_flight(fetcher, _locked_store(cached_minutes_ago=2))
+
+    result = cache.tournament(1)
+
+    assert fetcher.calls == []
+    assert (result.body, result.stale) == (OLD, False)
+    assert clock.now - T0 == timedelta(seconds=2)
+
+
+def test_lock_held_and_nothing_cached_fetches_after_waiting() -> None:
+    fetcher = FakeFetcher()
+    cache, _ = _single_flight(fetcher, _locked_store(cached_minutes_ago=None))
+
+    assert cache.tournament(1).body == FRESH
+    assert fetcher.calls == [1]
+
+
+def test_winner_takes_and_releases_the_lock() -> None:
+    store = InMemoryCacheStore()
+    taken: list[bool] = []
+
+    class Spy(FakeFetcher):
+        def fetch_tournament(self, tournament_id: int) -> bytes:
+            taken.append(lock_key(tournament_id) in store.locks)
+            return super().fetch_tournament(tournament_id)
+
+    cache, _ = _single_flight(Spy(), store)
+    cache.tournament(1)
+
+    assert taken == [True]
+    assert store.locks == {}
+
+
+def test_lock_is_released_when_the_fetch_fails() -> None:
+    store = InMemoryCacheStore()
+    cache, _ = _single_flight(FakeFetcher(error=Unavailable("down")), store)
+
+    with pytest.raises(Unavailable):
+        cache.tournament(1)
+    assert store.locks == {}
+
+
+def test_abandoned_lock_is_taken_over() -> None:
+    store = _locked_store()
+    store.locks[lock_key(1)] = T0 - timedelta(seconds=16)
+    fetcher = FakeFetcher()
+    cache, clock = _single_flight(fetcher, store)
+
+    assert cache.tournament(1).body == FRESH
+    assert fetcher.calls == [1]
+    assert clock.sleeps == 0
+
+
+def test_broken_lock_fetches_without_waiting() -> None:
+    fetcher = FakeFetcher()
+    clock = SleepingClock()
+    cache = TournamentCache(BrokenStore(), fetcher, clock, sleep=clock.sleep)
+
+    assert cache.tournament(1).body == FRESH
+    assert clock.sleeps == 0
