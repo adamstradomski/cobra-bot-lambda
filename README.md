@@ -104,4 +104,23 @@ uv run scripts/anonymize_fixture.py INPUT OUTPUT [--title TEXT] [--date YYYY-MM-
 
 The commands that regenerate the committed fixtures are kept with the local snapshots, in `snapshots/README.md`.
 
+### `scripts/register_commands.py` — register the `/cobra` command with Discord (T22)
+
+Overwrites the application's **global** commands with the definition in [`src/cobra_bot/registration.py`](src/cobra_bot/registration.py) (SPEC §2): `/cobra pairings`, `/cobra standings` and `/cobra player`, installable to servers and to user accounts (`integration_types: [0, 1]`), usable in servers, the bot DM and private channels (`contexts: [0, 1, 2]`). It runs in the project environment, so it uses the project's `httpx` and `cobra_bot`.
+
+```bash
+uv run scripts/register_commands.py --dry-run
+uv run scripts/register_commands.py
+```
+
+| Option / variable | Meaning |
+|-------------------|---------|
+| `--dry-run` | Print the JSON payload to stdout and exit. Sends nothing and needs no credentials. |
+| `DISCORD_APPLICATION_ID` | Application ID (Developer Portal → General Information). Required without `--dry-run`. |
+| `DISCORD_BOT_TOKEN` | Bot token (Developer Portal → Bot), used only for this API call. Required without `--dry-run`. It is never printed. Keep it out of shell history, e.g. read it from SSM `/cobra-bot/discord/bot-token`. |
+
+What it does: one `PUT https://discord.com/api/v10/applications/{id}/commands` request. Global commands can take a while to appear in Discord clients.
+
+**Exit codes:** `0` registered, or payload printed with `--dry-run`; `1` request failed (network error or non-2xx; Discord's error message is printed); `2` invalid arguments or missing environment variables.
+
 > **Running from the Claude desktop app on Windows:** the app is an MSIX package, so writes to `%APPDATA%\uv` are virtualised, and uv's Python install fails with `os error 17`. If you hit this, set `UV_PYTHON_INSTALL_DIR` to a directory outside `%APPDATA%`. uv run from a normal terminal is not affected.

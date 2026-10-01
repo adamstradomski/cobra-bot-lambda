@@ -87,3 +87,14 @@ SOS = "SoS"
 
 def tournament_fallback_name(tournament_id: int) -> str:
     return f"Tournament {tournament_id}"
+
+
+# --- command registration (SPEC §2) --------------------------------------------
+
+COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
+PAIRINGS_DESCRIPTION = "Show pairings for a Swiss round"
+STANDINGS_DESCRIPTION = "Show the current standings"
+PLAYER_DESCRIPTION = "Find players and their latest pairing (only you see it)"
+TOURNAMENT_OPTION_DESCRIPTION = "Cobra tournament ID, link or shortcode"
+ROUND_OPTION_DESCRIPTION = "Swiss round number (default: the latest)"
+QUERY_OPTION_DESCRIPTION = "Part of the player's name"

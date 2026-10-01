@@ -33,3 +33,8 @@ def _load_script(name: str) -> ModuleType:
 @pytest.fixture(scope="session")
 def anonymizer() -> ModuleType:
     return _load_script("anonymize_fixture")
+
+
+@pytest.fixture(scope="session")
+def register_script() -> ModuleType:
+    return _load_script("register_commands")
