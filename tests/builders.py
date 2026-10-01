@@ -1,0 +1,76 @@
+"""Builders for domain objects, so tests construct inputs directly at their layer."""
+
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tournament
+
+FETCHED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+FETCHED_AT_TAG = "<t:1790856000:R>"
+
+
+def player(
+    pid: int,
+    name: str | None = None,
+    *,
+    rank: int = 1,
+    points: int = 0,
+    sos: str = "0",
+    corp: str | None = None,
+    runner: str | None = None,
+) -> Player:
+    return Player(
+        id=pid,
+        name=name if name is not None else f"Player{pid}",
+        rank=rank,
+        match_points=points,
+        sos=Decimal(sos),
+        esos=Decimal(0),
+        corp_faction=None,
+        corp_identity=corp,
+        runner_faction=None,
+        runner_identity=runner,
+    )
+
+
+def seat(
+    pid: int | None,
+    role: Role | None = None,
+    combined: int | None = None,
+    *,
+    corp: int | None = None,
+    runner: int | None = None,
+    winner: bool | None = None,
+) -> Seat:
+    return Seat(pid, role, combined, corp, runner, winner)
+
+
+def pairing(
+    table: int,
+    seat1: Seat,
+    seat2: Seat,
+    *,
+    intentional_draw: bool = False,
+    elimination: bool = False,
+) -> Pairing:
+    return Pairing(table, seat1, seat2, intentional_draw, False, elimination)
+
+
+def tournament(
+    *rounds: Round,
+    players: tuple[Player, ...] = (),
+    name: str = "Test Cup",
+    tid: int = 1,
+    stale: bool = False,
+) -> Tournament:
+    return Tournament(
+        id=tid,
+        name=name,
+        date=None,
+        cut_to_top=0,
+        preliminary_rounds=len(rounds),
+        players=players,
+        rounds=rounds,
+        fetched_at=FETCHED_AT,
+        stale=stale,
+    )

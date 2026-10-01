@@ -40,6 +40,7 @@ warn_unreachable = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]  # shared helpers: tests/builders.py
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
 filterwarnings = ["error"]
