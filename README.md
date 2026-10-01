@@ -2,6 +2,20 @@
 
 Discord bot that shows pairings and standings of [Cobra](https://tournaments.nullsignal.games/) Netrunner tournaments, running on AWS Lambda. See [`docs/requirements.md`](docs/requirements.md), [`docs/spec.md`](docs/spec.md) and [`docs/tasks.md`](docs/tasks.md).
 
+## Development
+
+Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned in `.python-version` and `pyproject.toml`) when needed.
+
+| Command | What it does |
+|---------|--------------|
+| `uv sync` | Creates `.venv` and installs the project and its dev tools (pytest, ruff, mypy) at the versions locked in `uv.lock`. |
+| `uv run pytest` | Runs the tests in `tests/`. Configured in `pyproject.toml`: warnings are errors, unknown markers and config keys fail the run. Exits non-zero if any test fails. |
+| `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
+| `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
+| `uv run mypy src` | Type-checks `src/` in strict mode. |
+
+All four checks must pass before a change is merged.
+
 ## Scripts
 
 ### `scripts/capture_snapshots.py` — capture raw Cobra snapshots (T01)
