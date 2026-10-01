@@ -24,8 +24,8 @@ Exception: runs before the repo scaffold, as a standalone script; not covered by
 
 ### T04 — Fixture anonymiser
 - `scripts/anonymize_fixture.py` per SPEC §12 (deterministic pseudonyms, optional injection of edge-case names).
-- Anonymise and commit fixtures: 4909, 4990, selected live snapshots, double-sided, synthetic "no rounds".
-- **DoD:** test proves IDs, ranks and scores are unchanged and no original name remains; fixtures committed.
+- Anonymise and commit fixtures: `single_sided_top8` (4909), `large_top_cut` (4990), `dss` (5018, live double-sided), `not_started` (5125, an empty real export instead of a synthetic one).
+- **DoD:** tests prove player IDs are remapped consistently, ranks and scores are unchanged, and no original name or other personal data remains; fixtures committed.
 
 ## Phase 2 — Domain (pure, no I/O)
 

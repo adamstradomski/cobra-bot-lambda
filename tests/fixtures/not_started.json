@@ -1,0 +1,24 @@
+{
+  "name": "Not Started Fixture",
+  "date": "2000-01-01",
+  "cutToTop": 0,
+  "preliminaryRounds": 0,
+  "tournamentOrganiser": {
+    "nrdbId": 1,
+    "nrdbUsername": "fixture-organiser"
+  },
+  "players": [],
+  "eliminationPlayers": [],
+  "rounds": [],
+  "uploadedFrom": "Cobra",
+  "links": [
+    {
+      "rel": "schemaderivedfrom",
+      "href": "https://tournaments.nullsignal.games/schemas/tournament-schema.json"
+    },
+    {
+      "rel": "uploadedfrom",
+      "href": "https://tournaments.nullsignal.games/tournaments/FXTR"
+    }
+  ]
+}

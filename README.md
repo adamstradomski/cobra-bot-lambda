@@ -74,4 +74,34 @@ uv run scripts/capture_snapshots.py <double-sided-id> --once
 
 Keep representative snapshots: round start, mid-round, round complete, round 1 with no results, and cut start. Snapshots contain real player names. Anonymise them with `scripts/anonymize_fixture.py` (T04) before anything goes into `tests/fixtures/`.
 
+### `scripts/anonymize_fixture.py` — anonymise a Cobra export into a test fixture (T04)
+
+Turns a raw export from `snapshots/` into a committable fixture in `tests/fixtures/`, following [SPEC §12](docs/spec.md). Standard library only, Python ≥ 3.14 via `uv run`.
+
+```bash
+uv run scripts/anonymize_fixture.py INPUT OUTPUT [--title TEXT] [--date YYYY-MM-DD] [--inject-edge-case-names]
+```
+
+| Argument / option | Default | Meaning |
+|-------------------|---------|---------|
+| `INPUT` | — | Raw Cobra export (JSON) to read. |
+| `OUTPUT` | — | Fixture to write: UTF-8, 2-space indented, LF line endings. Parent directories are created and an existing file is replaced. |
+| `--title TEXT` | `Fixture Tournament` | Tournament `name` in the fixture. |
+| `--date YYYY-MM-DD` | `2000-01-01` | Tournament `date` in the fixture. |
+| `--inject-edge-case-names` | off | Gives the four lowest-ranked players the names `@Mention`, `*bold_name~`, `Maëlig` and `Żółw`, starting from the last rank, so tests cover escaping and diacritics. |
+
+**What changes and what is kept**
+
+- **Player IDs:** remapped everywhere (`players`, `rounds`, `eliminationPlayers`): new ID = 1000 + position (1-based) in the sorted original IDs. `null` (bye) stays `null`.
+- **Names:** become `Player{new ID − 1000:04d}`, in `players` and `eliminationPlayers`.
+- **Pronouns:** `pronouns` becomes `""`.
+- **Other identifying fields:** `tournamentOrganiser` becomes `{"nrdbId": 1, "nrdbUsername": "fixture-organiser"}`, and the shortcode link (`uploadedfrom`) becomes `…/tournaments/FXTR`.
+- **Kept unchanged:** ranks, points, SoS/eSoS, scores, tables, flags, factions and identities.
+
+**Unknown keys** anywhere in the export make the script stop with an error. A new Cobra field must be reviewed and added to the allowlist in the script before it can reach a fixture.
+
+**Exit codes:** `0` fixture written; `1` input unreadable, not JSON, or rejected (unknown key, unknown player ID); `2` invalid arguments.
+
+The commands that regenerate the committed fixtures are kept with the local snapshots, in `snapshots/README.md`.
+
 > **Running from the Claude desktop app on Windows:** the app is an MSIX package, so writes to `%APPDATA%\uv` are virtualised, and uv's Python install fails with `os error 17`. If you hit this, set `UV_PYTHON_INSTALL_DIR` to a directory outside `%APPDATA%`. uv run from a normal terminal is not affected.
