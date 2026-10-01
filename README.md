@@ -14,7 +14,7 @@ Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned 
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
 
-All four checks must pass before a change is merged.
+All four checks must pass before a change is merged. GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs them on every push and pull request, after `uv sync --locked`, which fails if `uv.lock` is out of date with `pyproject.toml`.
 
 ## Scripts
 
