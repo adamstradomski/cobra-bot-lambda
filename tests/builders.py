@@ -2,11 +2,18 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tournament
 
 FETCHED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 FETCHED_AT_TAG = "<t:1790856000:R>"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def fixture_bytes(name: str) -> bytes:
+    """Raw JSON of an anonymised fixture in tests/fixtures/."""
+    return (FIXTURES_DIR / f"{name}.json").read_bytes()
 
 
 def player(

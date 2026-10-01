@@ -1,13 +1,38 @@
-"""The `/cobra` command: read it from an interaction and hand it to the Worker
-(SPEC §2, §3).
+"""The `/cobra` command: read it from an interaction, hand it to the Worker, and
+run it there (SPEC §2, §3).
 
 The Worker receives only what it needs (`Job`), never the whole interaction,
 so no user data travels or gets logged (NFR-09).
 """
 
+import json
+import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Literal, cast
+
+from cobra_bot import messages
+from cobra_bot.cobra.cache import TournamentCache
+from cobra_bot.cobra.client import NotFound, Private, Unavailable
+from cobra_bot.cobra.parser import parse_tournament
+from cobra_bot.cobra.refs import InvalidTournamentRef, TournamentId, parse_ref
+from cobra_bot.domain.models import Tournament
+from cobra_bot.domain.rounds import (
+    NotStarted,
+    PairingsView,
+    RoundOutOfRange,
+    StandingsView,
+    TopCutNotSupported,
+    pairings_view,
+    standings_view,
+)
+from cobra_bot.domain.search import search_players
+from cobra_bot.formatting.chunking import Message, chunk
+from cobra_bot.formatting.pairings import format_pairings
+from cobra_bot.formatting.players import format_player_cards
+from cobra_bot.formatting.standings import format_standings
+
+log = logging.getLogger(__name__)
 
 type CommandName = Literal["pairings", "standings", "player"]
 
@@ -100,3 +125,70 @@ def _command(
         round=rnd if name == "pairings" else None,
         query=query if name == "player" else None,
     )
+
+
+# --- execution (Worker) ---------------------------------------------------------
+
+type Reply = tuple[Message, ...] | str  # chunked messages, or one plain text reply
+
+
+def execute(command: Command, cache: TournamentCache) -> Reply:
+    """Run a command end to end and map every expected failure to a message
+    (FR-16). Unexpected exceptions propagate to the handler."""
+    try:
+        ref = parse_ref(command.tournament)
+    except InvalidTournamentRef:
+        return messages.INVALID_REFERENCE
+    try:
+        tournament_id = (
+            ref.id if isinstance(ref, TournamentId) else cache.shortcode(ref.code)
+        )
+        result = cache.tournament(tournament_id)
+    except NotFound:
+        return messages.TOURNAMENT_NOT_FOUND
+    except Private:
+        return messages.TOURNAMENT_PRIVATE
+    except Unavailable:
+        return messages.COBRA_UNAVAILABLE
+    log.info(
+        "command=%s tournament=%s stale=%s private=%s",
+        command.name,
+        tournament_id,
+        result.stale,
+        result.private,
+    )
+    try:
+        t = parse_tournament(
+            json.loads(result.body),
+            tournament_id=tournament_id,
+            fetched_at=result.fetched_at,
+            stale=result.stale,
+        )
+    except ValueError:  # invalid JSON or ParseError
+        log.warning("unreadable export for tournament %s", tournament_id)
+        return messages.COBRA_DATA_UNREADABLE
+    return _run(command, t, private=result.private)
+
+
+def _run(command: Command, t: Tournament, *, private: bool) -> Reply:
+    match command.name:
+        case "pairings":
+            match pairings_view(t, command.round):
+                case NotStarted():
+                    return messages.NOT_STARTED
+                case RoundOutOfRange(requested=requested, last_round=last):
+                    return messages.round_out_of_range(requested, last)
+                case TopCutNotSupported():
+                    return messages.TOP_CUT_NOT_SUPPORTED
+                case PairingsView() as pairings:
+                    return chunk(format_pairings(t, pairings, private=private))
+        case "standings":
+            match standings_view(t):
+                case NotStarted():
+                    return messages.NOT_STARTED
+                case StandingsView() as standings:
+                    return chunk(format_standings(t, standings, private=private))
+        case "player":
+            query = command.query or ""
+            found = search_players(t.players, query)
+            return chunk(format_player_cards(t, found, query, private=private))
