@@ -30,6 +30,8 @@ select = [
     "SIM", # flake8-simplify
     "RUF", # ruff-specific
 ]
+# User-facing text uses the typographic en dash in scores and ranges ("3–0").
+allowed-confusables = ["–"]
 
 [tool.mypy]
 python_version = "3.14"

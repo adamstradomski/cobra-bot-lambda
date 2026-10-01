@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from cobra_bot import messages
 from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tournament
 
 ROLES: dict[object, Role] = {"corp": "corp", "runner": "runner"}
@@ -25,7 +26,7 @@ def parse_tournament(
     top = _mapping(raw, "export")
     return Tournament(
         id=tournament_id,
-        name=_str(top.get("name")) or f"Tournament {tournament_id}",
+        name=_str(top.get("name")) or messages.tournament_fallback_name(tournament_id),
         date=_date(top.get("date")),
         cut_to_top=_opt_int(top.get("cutToTop"), "cutToTop") or 0,
         preliminary_rounds=_opt_int(top.get("preliminaryRounds"), "preliminaryRounds")
