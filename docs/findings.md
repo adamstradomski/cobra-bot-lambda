@@ -41,7 +41,7 @@ This file records what the live Cobra exports actually look like. Per `CLAUDE.md
   - `Seat.role` is `None` when the key is absent.
   - A pairing is double-sided when its seats have no `role` key.
   - The round is complete when every non-bye seat has non-null `corpScore` **and** `runnerScore`.
-- **A bye can be in either slot.** In round 1 of 5018, `player2.id` is `null`. In round 2, **`player1.id`** is `null`. This contradicts SPEC §4 ("a bye is a pairing whose `player2.id` is `null`"). The parser must check both seats.
+- **A bye can be in either slot.** In round 1 of 5018, `player2.id` is `null`. In round 2, **`player1.id`** is `null`. This contradicted SPEC §4 ("a bye is a pairing whose `player2.id` is `null`"); the parser checks both seats. *Applied in SPEC §4 (v0.3).*
 - Table numbers 1..16 with no gaps here. A bye takes the last table.
 - **Not yet observed:** draws or ties (1 point), a pair with only one of the two games reported, intentional draws, and `twoForOne` in double-sided Swiss.
 
@@ -82,7 +82,7 @@ This file records what the live Cobra exports actually look like. Per `CLAUDE.md
   - any other non-200, or a 200 with a non-JSON body → Unavailable
   - keep 404 → NotFound in case Cobra starts sending it
 
-*Proposed spec change, not yet applied.*
+*Applied in SPEC §7 (v0.3).*
 
 User-facing handling of 401 is decided in FR-21, SPEC §7 and AC-25: serve the cache with "Tournament is now private — data from …", or reply "This tournament is private." when there is no cache.
 
@@ -91,7 +91,7 @@ User-facing handling of 401 is decided in FR-21, SPEC §7 and AC-25: serve the c
 - **Top-level keys:** `name`, `date`, `cutToTop`, `preliminaryRounds`, `tournamentOrganiser`, `players`, `eliminationPlayers`, `rounds`, `uploadedFrom`, `links`. `eliminationPlayers` is `[]` when there is no cut. In 4909 it has 8 entries with keys `id`, `name`, `rank` and `seed`. Those names also need anonymising.
 - **Player keys:** `id`, `name`, `rank`, `corpFaction`, `corpIdentity`, `runnerFaction`, `runnerIdentity`, `matchPoints`, `strengthOfSchedule`, `extendedStrengthOfSchedule`, `pronouns`. SoS and eSoS are strings (`"3.75"`).
 - **Missing identities:** 21 of 31 players in 5018 have `corpIdentity` / `runnerIdentity` (and their factions) set to `null`. Formatters must render missing IDs.
-- **Personal data beyond names:** `players[].pronouns` and `tournamentOrganiser.nrdbId` / `nrdbUsername`. SPEC §12 only covers names, so the anonymiser (T04) should also replace or remove these. *Proposed spec change, not yet applied.*
+- **Personal data beyond names:** `players[].pronouns` and `tournamentOrganiser.nrdbId` / `nrdbUsername`. The anonymiser (T04) replaces them. *Applied in SPEC §12.*
 - **HTTP:**
   - The JSON is served without gzip: 19 KB for 31 players and 3 rounds.
   - `Cache-Control: max-age=0, private, must-revalidate`.

@@ -1,6 +1,6 @@
 # Specification — Cobra Discord Bot
 
-Status: Draft v0.2 · 2026-10-01 · Requirements: see `requirements.md`
+Status: Draft v0.3 · 2026-10-01 · Requirements: see `requirements.md`
 
 ## 1. Architecture overview
 
@@ -78,7 +78,7 @@ class Player:
     name: str
     rank: int
     match_points: int
-    sos: Decimal                 # from string "strengthOfSchedule"
+    sos: Decimal                 # "strengthOfSchedule": a string or a number
     esos: Decimal
     corp_faction: str | None
     corp_identity: str | None
@@ -87,11 +87,11 @@ class Player:
 
 @dataclass(frozen=True)
 class Seat:
-    player_id: int | None        # None = bye
-    role: Literal["corp", "runner"] | None   # None in byes and (TBD) double-sided pairings
-    combined_score: int | None   # None = not reported (TBD)
-    corp_score: int | None
-    runner_score: int | None
+    player_id: int | None        # None = bye (either seat)
+    role: Literal["corp", "runner"] | None   # None in byes and double-sided pairings
+    combined_score: int | None   # None = not reported
+    corp_score: int | None       # double-sided: the player's result as Corp
+    runner_score: int | None     # double-sided: the player's result as Runner
     winner: bool | None          # elimination games only
 
 @dataclass(frozen=True)
@@ -102,12 +102,14 @@ class Pairing:
     intentional_draw: bool
     two_for_one: bool
     elimination: bool
+    # derived: is_bye (either seat has no player), double_sided (not a bye, not
+    # elimination, no roles), player_ids
 
 @dataclass(frozen=True)
 class Tournament:
     id: int
     name: str
-    date: date
+    date: date | None                         # None if missing or malformed
     cut_to_top: int
     preliminary_rounds: int
     players: tuple[Player, ...]
@@ -116,31 +118,39 @@ class Tournament:
     stale: bool                               # served from cache after a failed fetch
 ```
 
-Observed in real exports (4909, 4990, both single-sided):
-- Single-sided Swiss: each pairing has one Corp and one Runner seat.
-- A bye is a pairing whose `player2.id` is `null`; roles are `null`.
+Observed in real exports (4909, 4990 single-sided; 5018 double-sided; details in `findings.md`):
+- Single-sided Swiss: each pairing has one Corp and one Runner seat; roles are always set, even before results are reported.
+- Double-sided Swiss: one pairing per table and no `role` key; each seat carries the player's own Corp result (`corpScore`), Runner result (`runnerScore`) and their sum (`combinedScore`). There is no top-level double-sided flag, so a non-bye Swiss pairing without roles is double-sided.
+- A bye is a pairing where **either** `player1.id` or `player2.id` is `null`; roles are `null`. The bye seat's `combinedScore` is set immediately (e.g. 6 in double-sided Swiss); the empty seat may carry `combinedScore: 0`.
+- Unreported results are `null`, with the keys present.
 - Elimination rounds follow Swiss rounds in the same `rounds` array, with `eliminationGame: true` and `winner` instead of scores.
 - Table numbers may have gaps.
-- Some numeric fields arrive as strings (`strengthOfSchedule`), some as numbers.
-- Double-sided structure is not yet observed — TBD, fixture required (T01).
+- Some numeric fields arrive as strings or as numbers (`strengthOfSchedule` is usually a string, sometimes an integer).
+- The parser is tolerant: unknown keys are ignored, numbers given as strings are accepted, missing optional fields get defaults; it fails only when player IDs, ranks, tables or the overall shape are missing or malformed.
 
 ## 5. Round-state derivation
 
 - **Swiss rounds** = rounds whose pairings all have `eliminationGame == false`.
 - **Not started**: no rounds → "Tournament has not started yet."
-- **Round complete**: every non-bye pairing has all results reported (single-sided: both combined scores; double-sided: both games). *Assumption (TBD, verify with live snapshots): unreported scores are `null`.*
+- **Round complete**: every non-bye pairing has all results reported (single-sided: both combined scores; double-sided: both games, i.e. `corpScore` and `runnerScore` of both seats). Unreported scores are `null` (`findings.md` Q1).
 - **Latest Swiss round** = last Swiss round in the array (complete or not).
-- **Standings "after round N"**: N = number of the last complete Swiss round; if N = 0 → "No completed rounds yet", followed by the player list in Cobra's `rank` order. Cobra's `rank` is used as-is. *TBD: confirm `rank` reflects only completed rounds.*
+- **Standings "after round N"**: N = number of the last complete Swiss round; if N = 0 → "No completed rounds yet", followed by the player list in Cobra's `rank` order. Cobra's `rank` is used as-is; it is assumed to reflect completed rounds only (author decision, `findings.md` Q2).
+- **Round numbers** are 1-based positions in `rounds`; a requested round below 1 or above the number of rounds (Swiss and elimination) is out of range.
 - **Top cut present**: default `pairings` shows the latest Swiss round with the note "Top cut in progress — not supported yet"; `round` pointing at an elimination round → "Top cut is not supported yet."; `player` adds the same note.
 
 ## 6. Tournament reference parsing
 
 | Input | Result |
 |-------|--------|
-| `4909` | ID 4909 |
-| `https://tournaments.nullsignal.games/tournaments/4977/players/standings` | ID 4977 |
-| Shortcode, e.g. `HBYM` | FR-12 (Should): resolved via Cobra if T01 finds a reliable method; otherwise "Invalid tournament reference" |
-| Other hosts, other input | "Invalid tournament reference" |
+| `4909` (1–9 digits, > 0) | ID 4909 |
+| `https://tournaments.nullsignal.games/tournaments/4977/players/standings` (any page under `/tournaments/{id}`; `http` or `https`; query and fragment ignored) | ID 4977 |
+| Shortcode: 4 letters or digits, not all digits, any case, e.g. `QNSF`, `n9wi` | Shortcode `QNSF` / `N9WI` (FR-12), resolved via Cobra (below) |
+| `https://tournaments.nullsignal.games/QNSF` | Shortcode `QNSF` |
+| Other hosts, schemes or input | "Invalid tournament reference" |
+
+Surrounding whitespace and Discord's `<…>` link-suppression brackets are ignored. An all-digit input is always an ID, never a shortcode.
+
+Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirects. Cobra answers `302` in every case, so the `Location` header decides: `/tournaments/{id}` → that ID; `/tournaments/not_found?code=…` → "Tournament not found."; `/` → private tournament (see `codes/` in §7).
 
 ## 7. Cache (S3)
 
@@ -149,9 +159,9 @@ Observed in real exports (4909, 4990, both single-sided):
 - `codes/{CODE}.json` — shortcode → tournament ID, written whenever a shortcode resolves to `/tournaments/{id}`. Codes never change, so there is no TTL; the object expires with the bucket's 1-day lifecycle rule and is refreshed on every successful resolution. When a shortcode redirects to `/` (private tournament), the Worker looks the code up here; on a hit it continues with that ID (FR-21 applies), on a miss it replies "This tournament is private."
 - Fresh (age ≤ 60 s): served without contacting Cobra.
 - Expired or missing: fetch from Cobra, write to S3, serve.
-- Fetch failure (timeout, 5xx, connection error): serve the cached copy marked stale, any age; footer "Cobra unavailable — data from <t:UNIX:R>". No cached copy → "Cobra is unavailable, try again later."
-- 404 from Cobra → "Tournament not found." (not cached).
-- 401 from Cobra (private tournament, see `docs/findings.md` Q5; FR-21): the cache is not overwritten. Serve the cached copy marked stale, any age (up to the 1-day bucket lifecycle); footer "Tournament is now private — data from <t:UNIX:R>". No cached copy → "This tournament is private."
+- Fetch failure (timeout, 5xx, connection error): serve the cached copy marked stale, any age; notice "Cobra unavailable — data from <t:UNIX:R>" (§9). No cached copy → "Cobra is unavailable, try again later."
+- Non-existent tournament: Cobra answers `302` to `/error`, not 404 (`findings.md` Q5). The JSON is fetched without following redirects; a redirect to `/error`, or a 404, → "Tournament not found." (not cached). Any other unexpected status or a non-JSON body counts as a fetch failure.
+- 401 from Cobra (private tournament, see `docs/findings.md` Q5; FR-21): the cache is not overwritten. Serve the cached copy marked stale, any age (up to the 1-day bucket lifecycle); notice "Tournament is now private — data from <t:UNIX:R>" (§9). No cached copy → "This tournament is private."
 - **Single-flight (Should, NFR-03):** before fetching, the Worker creates `locks/{id}` with a conditional write (`If-None-Match: *`) containing a timestamp. The winner fetches and deletes the lock. Others wait up to 2 s polling for a fresh cache object, then serve stale data if available, else fetch themselves. A lock older than 15 s is treated as abandoned and replaced (conditional on its ETag).
 
 ## 8. Player search
@@ -161,15 +171,16 @@ Observed in real exports (4909, 4990, both single-sided):
 
 ## 9. Output format
 
-- Every message: embeds only, `allowed_mentions: {"parse": []}`; player names escaped for markdown.
-- First embed title: tournament name. First description line: e.g. "Round 5 pairings — in progress" or "Standings after round 8".
-- Footer: "Data from <t:UNIX:R>" (+ stale notice), and a link to the tournament on Cobra.
-- ID display: text before the first `:`.
-- Single-sided pairing: `T3 · Alice (Corp, Nuvem SA) 3–0 Bob (Runner, Arissana)`; unreported result: `vs`; intentional draw: `ID` instead of the score; bye: `T21 · Carol — BYE`.
-- Double-sided pairing (proposed, refine after fixture): `T3 · Alice 4–2 Bob` followed by both games, each in the single-sided form.
-- Standings line: `1. Alice — 22 pts — SoS 1.821 — Nuvem SA / Arissana`.
-- Player card: rank, points, SoS, IDs, latest Swiss round pairing or bye, top cut note if applicable.
-- Chunking: embed description ≤ 4096 chars; ≤ 10 embeds and ≤ 6000 total chars per message; at most 5 messages. Lines are never split. If the content does not fit, the last line of the last message reads "…and N more — full list on Cobra" with a link. First message edits the original response; the rest are follow-ups (ephemeral for `player`).
+- Every message: embeds only, `allowed_mentions: {"parse": []}`. User-provided text (player names, identities, the search query) is escaped for Discord markdown: a backslash goes before each of `` \ * _ ~ ` | > # - [ ] ( ) < : ``; whitespace runs, including newlines, collapse to one space.
+- First embed: title = tournament name (plain text; Discord does not render markdown in titles), title link = the tournament on Cobra (standings: its standings page). Only the first embed has a title.
+- Header (first description lines): the state line, e.g. "Round 5 pairings — in progress", "Standings after round 8" or "No completed rounds yet"; the top-cut note if applicable; then "Data from <t:UNIX:R>", or the stale notice instead ("Cobra unavailable — data from …" / "Tournament is now private — data from …"). This sits in the description, not the embed footer, because footers do not render Discord timestamps.
+- ID display: text before the first `:`; a missing identity shows `?`.
+- Single-sided pairing: `T3 · Alice (Corp, Nuvem SA) 3–0 Bob (Runner, Arissana)`; unreported result: `vs`; intentional draw: `ID` instead of the score; bye: `T21 · Carol — BYE`. Pairings are listed by table.
+- Double-sided pairing: `T3 · Alice 3–3 Bob` (combined scores), then one line per game in the single-sided form, prefixed `↳ `: seat 1 as Corp against seat 2 as Runner, then seat 2 as Corp against seat 1 as Runner. Each game shows `vs` until it is reported.
+- Standings line: `1. Alice — 22 pts — SoS 1.821 — Nuvem SA / Arissana`; SoS with three decimals; the rank is escaped (`1\.`) so Discord does not render the lines as a renumbered list.
+- Player card: the standings line, then `Round N: ` with the player's pairing in the latest Swiss round (in the pairing format above), the bye, or `not paired`. Header "Players matching “query”" plus the top-cut note if applicable; "…and N more matched" is the last entry; no match → "No players match."
+- Round out of range: "Round N does not exist. This tournament has rounds 1–M." All user-facing text lives in `messages.py`.
+- Chunking: embed description ≤ 4096 chars; ≤ 10 embeds and ≤ 6000 total chars per message; at most 5 messages. Entries are never split (a double-sided pairing or a player card is one entry). If the content does not fit, the longest prefix of entries is kept and the last line of the last message reads "…and N more — [full list on Cobra](url)". First message edits the original response; the rest are follow-ups (ephemeral for `player`).
 
 ## 10. Security
 
@@ -196,8 +207,9 @@ Observed in real exports (4909, 4990, both single-sided):
   - player IDs are remapped consistently everywhere they appear (`players`, `rounds`, `eliminationPlayers`): new ID = 1000 + position (1-based) in the sorted original IDs; `null` (bye) stays `null`;
   - `pronouns` is set to `""`; `tournamentOrganiser.nrdbId` and `nrdbUsername` are replaced by fixed fake values;
   - the tournament `name` and `date` are replaced by fixed fake values; the shortcode in `links[rel=uploadedfrom]` is replaced by a fake one;
-  - ranks, match points, SoS/eSoS, all scores, table numbers, flags, factions and identities are kept.
-- Fixture files are named by content (e.g. `single_sided_top8.json`), not by Cobra tournament ID.
+  - ranks, match points, SoS/eSoS, all scores, table numbers, flags, factions and identities are kept;
+  - only known keys are accepted: an unknown key anywhere in the export aborts the run, so a new Cobra field cannot reach a committed fixture without review.
+- Fixture files are named by content, not by Cobra tournament ID: `single_sided_top8` (4909), `large_top_cut` (4990), `dss` (5018, live double-sided), `not_started` (5125, empty export). A test checks that every committed fixture looks anonymised.
 - Edge-case names are injected deliberately into some fixtures (e.g. `@Mention`, `*bold_name~`, `Maëlig`, `Żółw`) so tests still cover escaping and diacritics.
 - Acceptance criteria refer to players by fixture player ID, not by name.
 
@@ -239,7 +251,7 @@ Automated tests cover all criteria except AC-20 (manual).
 |------|--------|-----------|
 | Cobra JSON is not an official API and may change | Bot breaks | Tolerant parser; fixture tests; contact NSG after MVP. |
 | NSG does not agree to the bot | Project stops or changes | Show MVP early; shared cache and User-Agent minimise load. |
-| Live-round or double-sided JSON differs from assumptions | Wrong labels or crashes | T01 snapshots before implementing `rounds.py`. |
+| Live-round or double-sided JSON differs from assumptions | Wrong labels or crashes | T01 snapshots (`findings.md`); tolerant parser; real fixtures for live and double-sided rounds. |
 | Thundering herd on cache expiry | Burst of requests to Cobra | Single-flight lock (Should); accepted small herd until then. |
 | Discord rate limits on follow-ups | Missing messages | 5-message cap; respect `Retry-After`. |
 | User install exposes the bot to many contexts | More traffic | Shared cache; budget alarm; rate limiting as follow-up if needed. |
@@ -247,10 +259,10 @@ Automated tests cover all criteria except AC-20 (manual).
 
 ## 15. Open questions
 
-1. Unreported results in live JSON — `null`, missing, or 0? (T01)
-2. Does `rank` in a live export reflect only completed rounds? (T01)
-3. Double-sided JSON structure. (T01)
-4. Shortcode → ID resolution method and shortcode format. (T01)
-5. Response for unpublished/private tournaments (404, 403, other)? (T01)
+1. ~~Unreported results in live JSON — `null`, missing, or 0?~~ Resolved: `null`, keys present (§4).
+2. ~~Does `rank` in a live export reflect only completed rounds?~~ Assumed yes (author decision; §5).
+3. ~~Double-sided JSON structure.~~ Resolved (§4).
+4. ~~Shortcode → ID resolution method and shortcode format.~~ Resolved (§6).
+5. ~~Response for unpublished/private tournaments?~~ Resolved: private → 401; non-existent → 302 to `/error` (§7).
 6. ~~Exact Python version supported by Lambda at implementation time.~~ Resolved: Python 3.14 (§3).
 7. Response-time target (NFR-05) and expected load.
