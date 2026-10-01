@@ -1,10 +1,23 @@
 import importlib.util
+import json
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+@pytest.fixture(scope="session")
+def raw_fixture() -> Callable[[str], object]:
+    """Load an anonymised Cobra export from tests/fixtures/ by name."""
+
+    def load(name: str) -> object:
+        return json.loads((FIXTURES_DIR / f"{name}.json").read_text(encoding="utf-8"))
+
+    return load
 
 
 def _load_script(name: str) -> ModuleType:
