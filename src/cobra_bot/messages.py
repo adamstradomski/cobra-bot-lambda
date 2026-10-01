@@ -55,6 +55,11 @@ def stale_tournament_private(timestamp: str) -> str:
     return f"Tournament is now private — data from {timestamp}"
 
 
+def player_round(round_number: int, pairing: str) -> str:
+    """A player's pairing (already formatted) in the given round."""
+    return f"Round {round_number}: {pairing}"
+
+
 def more_players_matched(count: int) -> str:
     return f"…and {count} more matched"
 
