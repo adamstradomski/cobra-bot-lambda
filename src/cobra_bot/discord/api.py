@@ -1,0 +1,129 @@
+"""Discord interaction webhooks: edit the deferred response, post follow-ups
+(SPEC §3, §9; NFR-06, NFR-10).
+
+- Every payload sets `allowed_mentions: {"parse": []}` so nothing pings.
+- Only HTTP 429 is retried, after `Retry-After` (Discord did not process the
+  request). Network errors are not retried: a POST that timed out may have been
+  delivered, and a retry could duplicate the message.
+- The interaction token is part of the URL; it never appears in errors.
+"""
+
+import json
+import time
+from collections.abc import Callable, Sequence
+
+import httpx
+
+from cobra_bot.formatting.chunking import Embed, Message
+
+DISCORD_API = "https://discord.com/api/v10"
+USER_AGENT = "DiscordBot (https://github.com/adamstradomski/cobra-bot-lambda, 0.1)"
+TIMEOUT_S = 10.0
+EPHEMERAL = 1 << 6  # message flag 64
+MAX_RATE_LIMIT_RETRIES = 3
+MAX_RETRY_AFTER_S = 10.0
+
+type Sleep = Callable[[float], None]
+type Payload = dict[str, object]
+
+
+class DiscordError(Exception):
+    """A webhook request failed; the message says how, never with the token."""
+
+
+def make_http_client() -> httpx.Client:
+    return httpx.Client(timeout=TIMEOUT_S, headers={"User-Agent": USER_AGENT})
+
+
+def embed_payload(embed: Embed) -> Payload:
+    payload: Payload = {"description": embed.description}
+    if embed.title is not None:
+        payload["title"] = embed.title
+    if embed.url is not None:
+        payload["url"] = embed.url
+    return payload
+
+
+def message_payload(embeds: Sequence[Embed], *, ephemeral: bool = False) -> Payload:
+    payload: Payload = {
+        "embeds": [embed_payload(e) for e in embeds],
+        "allowed_mentions": {"parse": []},
+    }
+    if ephemeral:
+        payload["flags"] = EPHEMERAL
+    return payload
+
+
+class WebhookClient:
+    def __init__(
+        self,
+        http: httpx.Client,
+        application_id: str,
+        sleep: Sleep = time.sleep,
+        base_url: str = DISCORD_API,
+    ) -> None:
+        self._http = http
+        self._application_id = application_id
+        self._sleep = sleep
+        self._base_url = base_url.rstrip("/")
+
+    def send(self, token: str, messages: Sequence[Message], *, ephemeral: bool) -> None:
+        """First message edits the deferred response; the rest are follow-ups.
+
+        The deferred response already carries the ephemeral flag; follow-ups need
+        it set explicitly.
+        """
+        for index, message in enumerate(messages):
+            if index == 0:
+                self.edit_original(token, message_payload(message))
+            else:
+                self.follow_up(token, message_payload(message, ephemeral=ephemeral))
+
+    def send_text(self, token: str, text: str) -> None:
+        """A single-embed reply, e.g. an error message, in place of the deferral."""
+        self.edit_original(token, message_payload([Embed(description=text)]))
+
+    def edit_original(self, token: str, payload: Payload) -> None:
+        self._request("PATCH", f"{self._webhook(token)}/messages/@original", payload)
+
+    def follow_up(self, token: str, payload: Payload) -> None:
+        self._request("POST", self._webhook(token), payload)
+
+    def _webhook(self, token: str) -> str:
+        return f"{self._base_url}/webhooks/{self._application_id}/{token}"
+
+    def _request(self, method: str, url: str, payload: Payload) -> None:
+        for _ in range(MAX_RATE_LIMIT_RETRIES + 1):
+            try:
+                response = self._http.request(method, url, json=payload)
+            except httpx.HTTPError as err:
+                raise DiscordError(f"{method} failed: {type(err).__name__}") from None
+            if response.status_code != 429:
+                if response.is_success:
+                    return
+                raise DiscordError(f"{method} failed: HTTP {response.status_code}")
+            delay = _retry_after(response)
+            if delay is None or delay > MAX_RETRY_AFTER_S:
+                raise DiscordError(f"{method} rate limited for too long")
+            self._sleep(delay)
+        raise DiscordError(f"{method} still rate limited after retries")
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    """Seconds to wait: the `Retry-After` header, else `retry_after` in the body."""
+    header = response.headers.get("Retry-After")
+    candidates: list[object] = [header]
+    try:
+        body = json.loads(response.content)
+        if isinstance(body, dict):
+            candidates.append(body.get("retry_after"))
+    except ValueError:
+        pass
+    for value in candidates:
+        try:
+            seconds = float(str(value))
+        except ValueError:
+            continue
+        if seconds >= 0:
+            return seconds
+    return None
