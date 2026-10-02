@@ -70,7 +70,7 @@ Discord's 8 ANSI colors cannot be customized and differ between themes (light, d
 |----|----------|-------------|
 | A-1 | MUST | IDs are shown in short form (≤ 9 columns) from a mapping in one data file (`src/cobra_bot/formatting/identities.py`), not hard-coded in the renderer. |
 | A-2 | MUST | Fallback for an unmapped ID. Runner: the nickname in quotes if present (`René "Loup" Arcemont` → `Loup`), otherwise the first word. Corp: the part before `:`. In both cases, truncate to 9 columns with `…` and log a warning. |
-| A-3 | MUST | Initial mapping:<br>Corp — Nuvem SA→Nuvem, Méliès U→Méliès, Nebula Talent Management→Nebula, Haas-Bioroid→HB, AU Co.→AU Co., Weyland Consortium→Weyland, Ob Superheavy Logistics→Ob, Editorial Division→Editorial, The Zwicky Group→Zwicky, BANGUN→BANGUN, Issuaq Adaptics→Issuaq, Earth Station→Earth St., Synapse Global→Synapse, GameNET→GameNET.<br>Runner — Arissana Rocha Nahu→Arissana, Sebastião Souza Pessoa→Sebastião, MuslihaT→MuslihaT, René "Loup" Arcemont→Loup, Esâ Afontov→Esâ, Magdalene Keino-Chemutai→Magdalene, Ryō "Phoenix" Ōno→Phoenix, Lat→Lat, Dewi Subrotoputri→Dewi, Az McCaffrey→Az, Mercury→Mercury, Zahya Sadeghi→Zahya, Captain Padma Isbister→Padma, Barry "Baz" Wong→Baz, Omission→Omission.<br>GameNET is confirmed: the fixtures show Cobra returns `GameNET` before the `:`. **TBD:** the fixtures show `Hiram "0mission" Svensson` (with a zero), not `Omission`; the A-2 fallback renders it `0mission`. Confirm whether to map it, and to what. |
+| A-3 | MUST | Initial mapping:<br>Corp — Nuvem SA→Nuvem, Méliès U→Méliès, Nebula Talent Management→Nebula, Haas-Bioroid→HB, AU Co.→AU Co., Weyland Consortium→Weyland, Ob Superheavy Logistics→Ob, Editorial Division→Editorial, The Zwicky Group→Zwicky, BANGUN→BANGUN, Issuaq Adaptics→Issuaq, Earth Station→Earth St., Synapse Global→Synapse, GameNET→GameNET.<br>Runner — Arissana Rocha Nahu→Arissana, Sebastião Souza Pessoa→Sebastião, MuslihaT→MuslihaT, René "Loup" Arcemont→Loup, Esâ Afontov→Esâ, Magdalene Keino-Chemutai→Magdalene, Ryō "Phoenix" Ōno→Phoenix, Lat→Lat, Dewi Subrotoputri→Dewi, Az McCaffrey→Az, Mercury→Mercury, Zahya Sadeghi→Zahya, Captain Padma Isbister→Padma, Barry "Baz" Wong→Baz, Hiram "0mission" Svensson→0mission.<br>Both confirmed against the fixtures: Cobra returns `GameNET` before the `:`, and the Runner as `Hiram "0mission" Svensson` (with a zero). |
 | A-4 | MUST | An unknown or unregistered ID is shown as `—` in the secondary color. |
 | A-5 | SHOULD | Before shortening, normalize the ID to the part before `:` (Cobra returns e.g. `Nuvem SA: Law of the Land`). |
 
@@ -110,7 +110,7 @@ Header: `**Round {n} pairings — complete|in progress**`. When Cobra reports a 
 | P-1 | MUST | Status is `complete` when every game has a result, otherwise `in progress`. |
 | P-2 | MUST | Points shown are the **points the player scored** (`3`, `0`, or any other value Cobra reports, as is), right-aligned in 2 and colored yellow. `ID` = intentional draw. `–` = no result yet. A player with more points is bold; with fewer, secondary; equal or no result, primary. |
 | P-3 | MUST | Table label `T{n}` padded to 4, primary, on the first line of a table only. Following lines are indented with 4 spaces. From table 100 the label column widens for the whole round. |
-| P-4 | MUST | Bye: `T{n}  BYE {player} · {id}`, a single line. **TBD:** which ID to show. Note that a 15-column name and a 9-column ID make this line 35 columns, one over C-5. *Current behaviour:* no ID, `T{n}  BYE {player}`. |
+| P-4 | MUST | Bye: `T{n}  BYE {player}`, a single line with no ID (a 15-column name plus an ID would not fit C-5). |
 | P-5 | MUST | How to detect a single-sided vs. a double-sided round. *Answered by findings Q3:* a pairing is double-sided when neither seat has a role (a Corp/Runner role exists only in single-sided games); detected per pairing. |
 | P-6 | SHOULD | Table order: ascending table number, as in Cobra. |
 
@@ -134,7 +134,7 @@ T2  ID Suipe · Nuvem
 
 ```
 T1   3 Kris_Casual
-      C GameNET   0  R Omission  3
+      C GameNET   0  R 0mission  3
      3 Matuszczak
       R —         3  C —         0
 ```
@@ -162,7 +162,7 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 3. All fixtures satisfy the C-9 limits. 60 generated players trigger the split described in C-11.
 4. With ANSI codes removed, every winner is identifiable from the points alone, and every DSS deck from the `C`/`R` tag alone.
 5. SSS: `Inermis (Runner) 0–3 Minstrel (Corp)` renders Minstrel on line 1 with `3` (bold) and Inermis on line 2 with `0` (secondary).
-6. DSS: Kris_Casual (C GameNET) 0–3 Matuszczak (R —), then Matuszczak (C —) 0–3 Kris_Casual (R Omission), renders exactly the 4 lines from §3.2.
+6. DSS: Kris_Casual (C GameNET) 0–3 Matuszczak (R —), then Matuszczak (C —) 0–3 Kris_Casual (R 0mission), renders exactly the 4 lines from §3.2.
 7. DSS with no results: all points are `–`, and both players are primary and not bold.
 8. Output contains no `[30m`, no `↳`, and no `-` in scores. Every line ends with `[0m`.
 9. A name `` a`b `` renders `a'b`. A 20-character name is truncated to 14 characters plus `…`. A name with an emoji does not break the 34-column limit.
@@ -174,7 +174,5 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 - Output larger than 6000 characters (C-11).
 - Exact default text color and whether `[0;1m` works (§1.1). Light theme readability of the palette; `[36m` for Corp.
 - Dropped players (S-7). eSoS (S-8).
-- Which ID to show for a bye, and how to keep that line within 34 columns (P-4).
-- Whether and how to map `Hiram "0mission" Svensson` (A-3).
 - Exact Cobra API format for results and top cut beyond what `docs/findings.md` answers.
 - Wording of empty states (C-12).

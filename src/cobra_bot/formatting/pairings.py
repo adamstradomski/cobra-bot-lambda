@@ -82,7 +82,7 @@ def table_width(pairings: list[Pairing]) -> int:
 def pairing_rows(t: Tournament, pairing: Pairing, width: int = MIN_TABLE_WIDTH) -> str:
     label = f"T{pairing.table}"
     if pairing.is_bye:
-        # P-4: which ID to show for a bye is TBD, so none is shown yet.
+        # P-4: a bye shows no ID.
         (player_id,) = pairing.player_ids or (None,)
         return (
             f"{ansi.PRIMARY}{label:<{width}}{messages.BYE} "

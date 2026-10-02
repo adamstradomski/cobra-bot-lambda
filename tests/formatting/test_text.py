@@ -173,7 +173,8 @@ def test_corp_label(identity: str | None, label: str) -> None:
         ("Arissana Rocha Nahu: Street Artist", "Arissana"),
         ('René "Loup" Arcemont: Party Animal', "Loup"),
         ("Captain Padma Isbister: Intrepid Explorer", "Padma"),
-        ('Hiram "0mission" Svensson: X', "0mission"),  # fallback: the nickname
+        ('Hiram "0mission" Svensson: X', "0mission"),  # A-3
+        ('Kim "Ghost" Lee: X', "Ghost"),  # fallback: the nickname
         ("Ken “Express” Tenma: Disappeared Clone", "Express"),  # curly quotes
         ('Ken "" Tenma: Disappeared Clone', "Ken"),  # empty nickname: first word
         ("Virtual Intelligence, P.I.: X", "Virtual"),  # first word, comma dropped

@@ -162,7 +162,7 @@ def test_equal_points_leave_both_names_plain() -> None:
     ids=["player2-empty", "player1-empty"],
 )
 def test_bye(bye: Pairing) -> None:
-    """P-4: one line; which ID to show is TBD, so none is shown."""
+    """P-4: one line, no ID."""
     assert _rows(bye) == ["T21 BYE Carol"]
 
 
