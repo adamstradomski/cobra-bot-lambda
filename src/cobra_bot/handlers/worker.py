@@ -21,6 +21,7 @@ from cobra_bot.cobra.s3_store import S3CacheStore
 from cobra_bot.commands import Job, execute
 from cobra_bot.discord import api as discord
 from cobra_bot.discord.api import DiscordError, WebhookClient
+from cobra_bot.handlers.logging_setup import configure_logging
 
 log = logging.getLogger(__name__)
 
@@ -86,5 +87,6 @@ def _app_from_environment() -> WorkerApp:  # pragma: no cover - needs AWS
 def handler(event: Event, context: object) -> None:
     global _app
     if _app is None:
+        configure_logging()
         _app = _app_from_environment()
     _app.handle(event)

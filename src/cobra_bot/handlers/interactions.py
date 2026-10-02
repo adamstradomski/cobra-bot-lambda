@@ -19,6 +19,7 @@ from typing import Any, Protocol
 from cobra_bot import messages
 from cobra_bot.commands import Job, parse_command
 from cobra_bot.discord.verify import SignatureVerifier
+from cobra_bot.handlers.logging_setup import configure_logging
 
 log = logging.getLogger(__name__)
 
@@ -158,6 +159,7 @@ def handler(event: Event, context: object) -> Response:
     """Lambda entry point; configuration is read once per cold start."""
     global _app
     if _app is None:
+        configure_logging()
         import os
 
         import boto3  # type: ignore[import-untyped]  # provided by the Lambda runtime
