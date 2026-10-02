@@ -58,9 +58,13 @@ def stale_tournament_private(timestamp: str) -> str:
     return f"Tournament is now private — data from {timestamp}"
 
 
-def player_round(round_number: int, pairing: str) -> str:
-    """A player's pairing (already formatted) in the given round."""
-    return f"Round {round_number}: {pairing}"
+def player_round(round_number: int) -> str:
+    """Label above a player's pairing in the given round."""
+    return f"Round {round_number}"
+
+
+def player_not_paired(round_number: int) -> str:
+    return f"Round {round_number}: not paired"
 
 
 def more_players_matched(count: int) -> str:
@@ -73,16 +77,46 @@ def omitted_entries(count: int, url: str) -> str:
 
 # --- entry vocabulary -----------------------------------------------------------
 
-CORP = "Corp"
-RUNNER = "Runner"
 BYE = "BYE"
 INTENTIONAL_DRAW = "ID"
 VERSUS = "vs"
-UNKNOWN_IDENTITY = "?"
+UNKNOWN_IDENTITY = "—"
 UNKNOWN_PLAYER = "Unknown player"
-NOT_PAIRED = "not paired"
-POINTS = "pts"
+
+# Table column headings.
+RANK = "#"
+PLAYER = "Player"
+POINTS = "Pts"
 SOS = "SoS"
+CORP = "Corp"
+RUNNER = "Runner"
+TABLE = "T"
+SCORE = "Score"
+
+
+def _count(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+# Embed footers: a legend for the table (footers cannot show timestamps).
+
+
+def standings_footer(after_round: int | None, players: int) -> str:
+    parts = [f"Round {after_round}"] if after_round else []
+    parts += [_count(players, "player"), f"{POINTS} / {SOS} / {CORP} / {RUNNER}"]
+    return " · ".join(parts)
+
+
+def pairings_footer(round_number: int, tables: int) -> str:
+    return (
+        f"Round {round_number} · {_count(tables, 'table')} · "
+        f"{CORP} left, {RUNNER} right · score from {CORP} side"
+    )
+
+
+PLAYERS_FOOTER = (
+    f"{POINTS} / {SOS} / {CORP} / {RUNNER} · pairing: {CORP} left, {RUNNER} right"
+)
 
 
 def tournament_fallback_name(tournament_id: int) -> str:

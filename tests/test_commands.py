@@ -1,12 +1,13 @@
 """`execute`: every command and every expected failure, at the commands layer
 (fake fetcher, in-memory store). The Worker end-to-end tests cover the wiring."""
 
+import re
 from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
 
-from builders import FETCHED_AT, FETCHED_AT_TAG, fixture_bytes
+from builders import FETCHED_AT, FETCHED_AT_TAG, fixture_bytes, plain
 from cobra_bot import messages
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
 from cobra_bot.cobra.client import CobraError, NotFound, Private, Unavailable
@@ -63,7 +64,9 @@ def _messages(reply: object) -> tuple[Message, ...]:
 
 
 def _text(reply: tuple[Message, ...]) -> str:
-    return "\n".join(e.description for m in reply for e in m)
+    """All embed text, without colours."""
+    parts = (part for m in reply for e in m for part in (e.description, *e.fields))
+    return plain("\n".join(parts))
 
 
 # --- commands ------------------------------------------------------------------------
@@ -75,7 +78,7 @@ def test_pairings() -> None:
     reply = _messages(execute(Command("pairings", "4909", round=1), cache))
 
     assert reply[0][0].title == "Single-Sided Top 8 Fixture"
-    assert "T21 · Player0023 — BYE" in _text(reply)
+    assert re.search(r"^T21 +Player0023 +BYE$", _text(reply), re.MULTILINE)
 
 
 def test_standings() -> None:
@@ -83,7 +86,7 @@ def test_standings() -> None:
 
     reply = _messages(execute(Command("standings", "4909"), cache))
 
-    assert _text(reply).startswith("Standings after round 8\n")
+    assert _text(reply).startswith("**Standings after round 8**\n")
 
 
 def test_player() -> None:
@@ -91,7 +94,7 @@ def test_player() -> None:
 
     reply = _messages(execute(Command("player", "4909", query="layer0017"), cache))
 
-    assert "2\\. Player0017 — " in _text(reply)
+    assert re.search(r"^ 2  Player0017 +18  ", _text(reply), re.MULTILINE)
 
 
 def test_shortcode_reference() -> None:
@@ -99,7 +102,7 @@ def test_shortcode_reference() -> None:
 
     reply = _messages(execute(Command("pairings", "qnsf"), cache))
 
-    assert _text(reply).startswith("Round 3 pairings — in progress")
+    assert _text(reply).startswith("**Round 3 pairings — in progress**")
 
 
 def test_no_players_match() -> None:

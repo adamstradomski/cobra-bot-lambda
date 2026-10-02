@@ -14,7 +14,8 @@ from collections.abc import Callable, Sequence
 
 import httpx
 
-from cobra_bot.formatting.chunking import Embed, Message
+from cobra_bot.formatting.chunking import FIELD_NAME, Embed, Message
+from cobra_bot.formatting.document import EMBED_COLOR
 
 DISCORD_API = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (https://github.com/adamstradomski/cobra-bot-lambda, 0.1)"
@@ -41,6 +42,15 @@ def embed_payload(embed: Embed) -> Payload:
         payload["title"] = embed.title
     if embed.url is not None:
         payload["url"] = embed.url
+    if embed.color is not None:
+        payload["color"] = embed.color
+    if embed.fields:
+        payload["fields"] = [
+            {"name": FIELD_NAME, "value": value, "inline": False}
+            for value in embed.fields
+        ]
+    if embed.footer is not None:
+        payload["footer"] = {"text": embed.footer}
     return payload
 
 
@@ -80,8 +90,11 @@ class WebhookClient:
                 self.follow_up(token, message_payload(message, ephemeral=ephemeral))
 
     def send_text(self, token: str, text: str) -> None:
-        """A single-embed reply, e.g. an error message, in place of the deferral."""
-        self.edit_original(token, message_payload([Embed(description=text)]))
+        """A single-embed reply, e.g. an error message, in place of the deferral:
+        one sentence, no code block, in the bot colour (embed format C-2, C-14)."""
+        self.edit_original(
+            token, message_payload([Embed(description=text, color=EMBED_COLOR)])
+        )
 
     def edit_original(self, token: str, payload: Payload) -> None:
         self._request("PATCH", f"{self._webhook(token)}/messages/@original", payload)

@@ -68,7 +68,7 @@ def test_pairings_end_to_end() -> None:
     assert payload["allowed_mentions"] == {"parse": []}
     embed = payload["embeds"][0]  # type: ignore[index]
     assert embed["title"] == "DSS Fixture"
-    assert embed["description"].startswith("Round 3 pairings — in progress")
+    assert embed["description"].startswith("**Round 3 pairings — in progress**")
 
 
 def test_standings_end_to_end_with_follow_ups() -> None:
@@ -103,7 +103,7 @@ def test_error_reply_end_to_end() -> None:
             "PATCH",
             f"{WEBHOOK}/messages/@original",
             {
-                "embeds": [{"description": "Tournament not found."}],
+                "embeds": [{"description": "Tournament not found.", "color": 14725690}],
                 "allowed_mentions": {"parse": []},
             },
         )

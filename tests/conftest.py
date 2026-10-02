@@ -1,10 +1,12 @@
 import importlib.util
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+
+from cobra_bot.formatting.text import corp_label, runner_label
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -38,3 +40,14 @@ def anonymizer() -> ModuleType:
 @pytest.fixture(scope="session")
 def register_script() -> ModuleType:
     return _load_script("register_commands")
+
+
+@pytest.fixture(autouse=True)
+def _clear_id_label_caches() -> Iterator[None]:
+    """ID labels are cached per process (and log a missing ID once); every test
+    starts and ends with empty caches."""
+    corp_label.cache_clear()
+    runner_label.cache_clear()
+    yield
+    corp_label.cache_clear()
+    runner_label.cache_clear()

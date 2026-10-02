@@ -18,7 +18,7 @@ from cobra_bot.domain.rounds import (
     pairings_view,
     standings_view,
 )
-from cobra_bot.formatting.chunking import Embed, chunk
+from cobra_bot.formatting.chunking import FIELD_NAME, Embed, chunk
 from cobra_bot.formatting.pairings import format_pairings
 from cobra_bot.formatting.standings import format_standings
 
@@ -54,9 +54,11 @@ def _message(text: str = "x") -> tuple[Embed, ...]:
 # --- AC-21 ---------------------------------------------------------------------------
 
 
-def test_ac21_every_payload_blocks_mentions_and_names_are_escaped() -> None:
-    names = ("@Mention", "*bold_name~")
-    players = tuple(player(i, names[i % 2], rank=i) for i in range(1, 301))
+def test_ac21_every_payload_blocks_mentions_and_names_stay_in_code_blocks() -> None:
+    """Names sit in ```ansi code blocks, where markdown and mentions do not render;
+    a name cannot close the block early."""
+    names = ("@Mention", "*bold_name~", "```@everyone")
+    players = tuple(player(i, names[i % 3], rank=i) for i in range(1, 301))
     rnd = tuple(
         pairing(t, seat(2 * t - 1, "corp", 3), seat(2 * t, "runner", 0))
         for t in range(1, 151)
@@ -77,16 +79,20 @@ def test_ac21_every_payload_blocks_mentions_and_names_are_escaped() -> None:
 
     payloads = recorder.payloads()
     assert payloads
-    descriptions: list[str] = []
+    parts: list[str] = []
     for payload in payloads:
         assert payload["allowed_mentions"] == {"parse": []}
         embeds = payload["embeds"]
         assert isinstance(embeds, list)
-        descriptions += [e["description"] for e in embeds]
-    text = "\n".join(descriptions)
-    assert "*bold_name~" not in text  # never sent unescaped
-    assert r"\*bold\_name\~" in text
-    assert "@Mention" in text  # not markup; pings are blocked by allowed_mentions
+        for e in embeds:
+            parts += [e["description"], *(f["value"] for f in e.get("fields", []))]
+    for part in parts:
+        # Every part opens and closes its own block; names never add a fence.
+        assert part.count("```") == 2, part
+    text = "\n".join(parts)
+    assert "*bold_name~" in text  # literal inside the code block, not escaped
+    assert "@Mention" in text  # pings are blocked by allowed_mentions
+    assert "'''@everyone" in text  # backticks replaced (C-8)
 
 
 # --- routing --------------------------------------------------------------------------
@@ -140,6 +146,25 @@ def test_embed_title_and_url() -> None:
     ]
 
 
+def test_embed_colour_fields_and_footer() -> None:
+    recorder = Recorder()
+    embed = Embed(description="d", fields=("f1", "f2"), footer="legend", color=0xE0B23A)
+
+    recorder.client().send(TOKEN, [(embed,)], ephemeral=False)
+
+    assert recorder.payloads()[0]["embeds"] == [
+        {
+            "description": "d",
+            "color": 14725690,
+            "fields": [
+                {"name": FIELD_NAME, "value": "f1", "inline": False},
+                {"name": FIELD_NAME, "value": "f2", "inline": False},
+            ],
+            "footer": {"text": "legend"},
+        }
+    ]
+
+
 def test_send_text() -> None:
     recorder = Recorder()
 
@@ -147,7 +172,7 @@ def test_send_text() -> None:
 
     assert recorder.payloads() == [
         {
-            "embeds": [{"description": "Tournament not found."}],
+            "embeds": [{"description": "Tournament not found.", "color": 14725690}],
             "allowed_mentions": {"parse": []},
         }
     ]
