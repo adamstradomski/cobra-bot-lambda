@@ -84,7 +84,11 @@ def test_deploy_role_requires_the_sts_audience(bootstrap: Document) -> None:
 
 
 def test_bootstrap_defaults_match_the_repository(bootstrap: Document) -> None:
-    assert _default(bootstrap, "GitHubRepository") == "adamstradomski/cobra-bot-lambda"
+    """GitHub's default OIDC subject names the owner and repository with their IDs."""
+    assert (
+        _default(bootstrap, "GitHubRepository")
+        == "adamstradomski@83371226/cobra-bot-lambda@1400117730"
+    )
 
 
 def test_deploy_job_runs_in_the_trusted_environment(

@@ -141,7 +141,7 @@ GitHub Actions holds no AWS keys. It signs in through OIDC as the role `github-d
 
 One-time setup:
 
-1. **Deploy the roles** with administrator credentials. `SamArtifactBucket` is the `SamCliSourceBucket` output of the `aws-sam-cli-managed-default` stack, created by the first manual `sam deploy`. Pass `CreateOidcProvider=false` if the account already has an identity provider for `token.actions.githubusercontent.com`.
+1. **Deploy the roles** with administrator credentials. `SamArtifactBucket` is the `SamCliSourceBucket` output of the `aws-sam-cli-managed-default` stack, created by the first manual `sam deploy`. Pass `CreateOidcProvider=false` if the account already has an identity provider for `token.actions.githubusercontent.com`. The role trusts only the `production` environment of the repository named by `GitHubRepository`, written as GitHub's OIDC subject prefix shows it under repository **Settings → Actions → OIDC** (`owner@owner-id/name@repo-id`). Override it if that prefix differs; a mismatch fails the deploy with `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
 
    ```bash
    aws cloudformation deploy --region eu-central-1 --stack-name github-deploy-cobra-bot --template-file bootstrap/github-deploy.yaml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides SamArtifactBucket=<SamCliSourceBucket>
