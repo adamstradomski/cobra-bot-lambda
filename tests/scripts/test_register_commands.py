@@ -78,3 +78,23 @@ def test_network_error_fails(register_script: ModuleType) -> None:
     http = httpx.Client(transport=httpx.MockTransport(refused))
 
     assert register_script.main([], env=ENV, http=http) == 1
+
+
+def test_whitespace_around_credentials_is_stripped(register_script: ModuleType) -> None:
+    http, seen = _http()
+    env = {
+        "DISCORD_APPLICATION_ID": " app-1\r\n",
+        "DISCORD_BOT_TOKEN": " bot-secret \n",
+    }
+
+    assert register_script.main([], env=env, http=http) == 0
+    assert str(seen[0].url).endswith("/applications/app-1/commands")
+    assert seen[0].headers["Authorization"] == "Bot bot-secret"
+
+
+def test_blank_credentials_are_a_usage_error(register_script: ModuleType) -> None:
+    http, seen = _http()
+    env = {"DISCORD_APPLICATION_ID": "app-1", "DISCORD_BOT_TOKEN": "   "}
+
+    assert register_script.main([], env=env, http=http) == 2
+    assert seen == []

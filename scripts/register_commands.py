@@ -55,7 +55,9 @@ def main(
         return EXIT_OK
 
     env = os.environ if env is None else env
-    application_id, token = env.get(APP_ID_ENV), env.get(TOKEN_ENV)
+    # Strip whitespace that copy-paste into a terminal prompt easily adds.
+    application_id = (env.get(APP_ID_ENV) or "").strip()
+    token = (env.get(TOKEN_ENV) or "").strip()
     if not application_id or not token:
         print(f"register_commands: set {APP_ID_ENV} and {TOKEN_ENV}", file=sys.stderr)
         return EXIT_USAGE
