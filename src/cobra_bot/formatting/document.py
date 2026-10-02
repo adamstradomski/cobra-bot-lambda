@@ -1,18 +1,33 @@
-"""A formatted reply before it is split into Discord embeds and messages."""
+"""A formatted reply before it is split into Discord embeds and messages.
+
+The reply is a table in an ```ansi code block (SPEC §9): markdown header lines
+above it, optional markdown notes below it, and a legend in the embed footer.
+"""
 
 from dataclasses import dataclass
 
 from cobra_bot import messages
 from cobra_bot.domain.models import Tournament
-from cobra_bot.formatting.text import discord_timestamp, escape_markdown
+from cobra_bot.formatting.text import code_text, discord_timestamp
+
+EMBED_COLOR = 0xE0B23A
+
+
+@dataclass(frozen=True)
+class Entry:
+    text: str  # table lines with ANSI colours; one atomic block, never split
+    gap: bool = False  # a blank line before it, unless it starts a code block
 
 
 @dataclass(frozen=True)
 class Document:
     title: str  # embed title: plain text, Discord does not render markdown there
     url: str  # title link, and the "full list on Cobra" link when entries are cut
-    header: tuple[str, ...]  # first lines of the first embed
-    entries: tuple[str, ...]  # atomic blocks (may span lines); never split
+    header: tuple[str, ...]  # markdown lines above the table
+    entries: tuple[Entry, ...]  # table rows
+    columns: tuple[str, ...] = ()  # table heading lines, atop the first code block
+    notes: tuple[str, ...] = ()  # markdown lines below the table
+    footer: str = ""  # plain-text legend
 
 
 def data_line(t: Tournament, *, private: bool = False) -> str:
@@ -29,7 +44,17 @@ def data_line(t: Tournament, *, private: bool = False) -> str:
     return messages.stale_cobra_unavailable(timestamp)
 
 
+def heading(text: str) -> str:
+    """The state line, in bold."""
+    return f"**{text}**"
+
+
+def subtext(text: str) -> str:
+    """A small grey note line."""
+    return f"-# {text}"
+
+
 def player_name(t: Tournament, player_id: int | None) -> str:
-    """Escaped display name for a player ID."""
+    """Display name for a player ID, safe inside a code block."""
     player = t.player(player_id) if player_id is not None else None
-    return escape_markdown(player.name) if player else messages.UNKNOWN_PLAYER
+    return code_text(player.name) if player else messages.UNKNOWN_PLAYER

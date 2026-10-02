@@ -51,7 +51,7 @@ Before finishing any task, run pytest, ruff check, ruff format --check and mypy 
 - Unit tests never touch the network or real AWS; use fixtures, mocked HTTP, the in-memory `CacheStore`, and botocore `Stubber`.
 - Fixtures from real tournaments are committed only after anonymisation (`scripts/anonymize_fixture.py`). Tests refer to players by Cobra player ID, not by name.
 - Every acceptance criterion (`AC-xx` in `docs/spec.md`) has at least one test; reference the AC ID in the test name or docstring.
-- Every outgoing Discord payload sets `allowed_mentions: {"parse": []}`; player names are always escaped.
+- Every outgoing Discord payload sets `allowed_mentions: {"parse": []}`; player names are always made safe (`code_text` inside code blocks, `escape_markdown` elsewhere).
 - User-facing text is in English and lives only in `messages.py`.
 - Never log secrets, tokens, or full Cobra/Discord payloads.
 - Type hints everywhere; no `Any` without a comment explaining why.

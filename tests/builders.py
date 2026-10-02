@@ -1,5 +1,6 @@
 """Builders for domain objects, so tests construct inputs directly at their layer."""
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -9,6 +10,12 @@ from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tourname
 FETCHED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 FETCHED_AT_TAG = "<t:1790856000:R>"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+_SGR = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    """`text` without ANSI colour codes."""
+    return _SGR.sub("", text)
 
 
 def fixture_bytes(name: str) -> bytes:
