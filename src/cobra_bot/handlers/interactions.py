@@ -3,16 +3,16 @@
 Verify the signature, answer PING, acknowledge commands with a deferred response
 (ephemeral for `/cobra player`) and hand the work to the Worker asynchronously.
 
-Environment:
-- `DISCORD_PUBLIC_KEY_PARAMETER`: SSM SecureString with the application's public key
-  (default `/cobra-bot/discord/public-key`);
+Environment (set by the SAM template; nothing is hard-coded, so several bots or
+accounts can run the same code):
+- `DISCORD_PUBLIC_KEY`: the application's public key, hex (Developer Portal). It is
+  not a secret: it only verifies signatures;
 - `WORKER_FUNCTION_NAME`: the WorkerFunction to invoke.
 """
 
 import base64
 import json
 import logging
-import os
 from collections.abc import Mapping
 from typing import Any, Protocol
 
@@ -29,7 +29,8 @@ CHANNEL_MESSAGE = 4
 DEFERRED_CHANNEL_MESSAGE = 5
 EPHEMERAL = 1 << 6
 
-DEFAULT_PUBLIC_KEY_PARAMETER = "/cobra-bot/discord/public-key"
+PUBLIC_KEY_ENV = "DISCORD_PUBLIC_KEY"
+WORKER_ENV = "WORKER_FUNCTION_NAME"
 
 type Event = Mapping[str, Any]  # Any: Lambda events are untyped JSON
 type Response = dict[str, object]
@@ -134,26 +135,32 @@ def _ephemeral_message(text: str) -> Response:
 _app: InteractionsApp | None = None
 
 
-def _app_from_environment() -> InteractionsApp:  # pragma: no cover - needs AWS
-    import boto3  # type: ignore[import-untyped]  # provided by the Lambda runtime
+class ConfigurationError(RuntimeError):
+    """A required environment variable is missing, empty or invalid."""
 
-    parameter = os.environ.get(
-        "DISCORD_PUBLIC_KEY_PARAMETER", DEFAULT_PUBLIC_KEY_PARAMETER
-    )
-    ssm = boto3.client("ssm")
-    public_key = ssm.get_parameter(Name=parameter, WithDecryption=True)["Parameter"][
-        "Value"
-    ]
-    return InteractionsApp(
-        SignatureVerifier(public_key),
-        boto3.client("lambda"),
-        os.environ["WORKER_FUNCTION_NAME"],
-    )
+
+def app_from_environment(
+    env: Mapping[str, str], lambda_client: LambdaClient
+) -> InteractionsApp:
+    """Build the app from environment variables; fails fast on bad configuration."""
+    values = {name: env.get(name, "").strip() for name in (PUBLIC_KEY_ENV, WORKER_ENV)}
+    missing = sorted(name for name, value in values.items() if not value)
+    if missing:
+        raise ConfigurationError(f"missing environment variables: {missing}")
+    try:
+        verifier = SignatureVerifier(values[PUBLIC_KEY_ENV])
+    except ValueError:
+        raise ConfigurationError(f"{PUBLIC_KEY_ENV} is not a valid key") from None
+    return InteractionsApp(verifier, lambda_client, values[WORKER_ENV])
 
 
 def handler(event: Event, context: object) -> Response:
-    """Lambda entry point; secrets are read from SSM once per cold start."""
+    """Lambda entry point; configuration is read once per cold start."""
     global _app
     if _app is None:
-        _app = _app_from_environment()
+        import os
+
+        import boto3  # type: ignore[import-untyped]  # provided by the Lambda runtime
+
+        _app = app_from_environment(os.environ, boto3.client("lambda"))
     return _app.handle(event)

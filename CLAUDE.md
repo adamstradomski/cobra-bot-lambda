@@ -66,7 +66,7 @@ Before finishing any task, run pytest, ruff check, ruff format --check and mypy 
 
 - Command names, options, visibility (public vs ephemeral), integration types and contexts — a public contract registered in Discord.
 - Cache TTL (60 s), the stale-data behaviour, and the 5-message cap.
-- `template.yaml` resources, IAM permissions, retry settings, SSM parameter names, region, budget.
+- `template.yaml` resources, IAM permissions, retry settings, template parameters and environment variable names, region, budget.
 - Python version; adding or replacing dependencies.
 - Anything listed as Out of scope in `docs/requirements.md` (e.g. auto-publishing, `bot` scope, Gateway).
 - Requirements, spec, or acceptance criteria — propose changes instead of editing silently.

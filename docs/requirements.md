@@ -60,7 +60,7 @@ The bot is public. It can be added to any Discord server (server install) and by
 | NFR-05 | Should | Final response delivered within TBD seconds (p95, warm instance). |
 | NFR-06 | Must | A command never produces duplicate messages (no automatic retries of partially completed work). |
 | NFR-07 | Must | Discord request signatures (Ed25519) are verified; invalid requests are rejected with HTTP 401. |
-| NFR-08 | Must | Secrets (bot token, public key) are stored in AWS SSM Parameter Store (SecureString); never in the repository or logs. |
+| NFR-08 | Must | The bot token is used only by the local command registration script, from environment variables; it is never stored in AWS, the repository or logs. Deployed configuration (Discord public key, resource names) comes from template parameters as environment variables; nothing account- or bot-specific is hard-coded, so several bots or AWS accounts can run the same code. |
 | NFR-09 | Must | No persistent storage of user data. Only a cache of public tournament data, expiring automatically. |
 | NFR-10 | Must | Bot messages never trigger mentions (`allowed_mentions` empty); player names are escaped for Discord markdown. |
 | NFR-11 | Must | Test fixtures derived from real tournaments are anonymised before being committed. |

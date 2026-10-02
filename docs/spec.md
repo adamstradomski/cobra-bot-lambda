@@ -65,7 +65,7 @@ Registered globally by a script: `integration_types: [0, 1]` (guild, user), `con
 
 Runtime: Python 3.14 (AWS Lambda managed runtime `python3.14`; decided 2026-10-01).
 
-Libraries: `httpx` (HTTP), `PyNaCl` (Ed25519), `boto3` (provided by Lambda runtime; S3, SSM, Lambda invoke). Tests use an in-memory `CacheStore` fake — no AWS mocking library.
+Libraries: `httpx` (HTTP), `PyNaCl` (Ed25519), `boto3` (provided by Lambda runtime; S3, Lambda invoke). Tests use an in-memory `CacheStore` fake — no AWS mocking library.
 
 ## 4. Data model
 
@@ -185,8 +185,9 @@ Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirec
 ## 10. Security
 
 - Signature verification before any processing; reject on missing/invalid headers.
-- Secrets read from SSM at cold start; cached in memory.
-- IAM least privilege: InteractionsFunction — invoke WorkerFunction, read its SSM parameters. WorkerFunction — read/write/delete in the cache bucket, read its SSM parameters.
+- Configuration comes from environment variables set by template parameters, read once per cold start: InteractionsFunction — `DISCORD_PUBLIC_KEY` (hex; not a secret, it only verifies signatures) and `WORKER_FUNCTION_NAME`; WorkerFunction — `CACHE_BUCKET`. Missing, blank or invalid values fail at startup. Nothing account- or bot-specific is hard-coded.
+- The bot token is never deployed: only `scripts/register_commands.py` uses it, locally, from `DISCORD_BOT_TOKEN` (with `DISCORD_APPLICATION_ID`). The functions need no secrets: the application ID arrives with each interaction and replies use the interaction token.
+- IAM least privilege: InteractionsFunction — invoke WorkerFunction. WorkerFunction — read/write/delete objects in the cache bucket (and list it, so a missing key is a 404, not a 403). No SSM access.
 - Outbound calls limited in code to `tournaments.nullsignal.games` and `discord.com`.
 - No user data persisted; cache holds only public tournament data and expires.
 - Logs: command name, tournament ID, cache hit/miss/stale, durations, errors — never tokens or full payloads.
@@ -197,7 +198,7 @@ Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirec
 - `WorkerFunction`: timeout 30 s, memory 256 MB; `EventInvokeConfig` with `MaximumRetryAttempts: 0` and `MaximumEventAgeInSeconds: 600` (interaction tokens expire after 15 min).
 - `CacheBucket` (S3, private, lifecycle 1 day).
 - Log groups with 14-day retention.
-- SSM parameters (created manually, names passed as template parameters): `/cobra-bot/discord/public-key`, `/cobra-bot/discord/app-id`, `/cobra-bot/discord/bot-token`.
+- Template parameter `DiscordPublicKey` → `DISCORD_PUBLIC_KEY` on InteractionsFunction. No SSM parameters.
 - `AWS::Budgets::Budget`: USD 5/month, email alert.
 
 ## 12. Test fixtures

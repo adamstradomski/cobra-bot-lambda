@@ -8,7 +8,11 @@ from nacl.signing import SigningKey
 
 from cobra_bot.commands import Command, Job
 from cobra_bot.discord.verify import SignatureVerifier
-from cobra_bot.handlers.interactions import InteractionsApp
+from cobra_bot.handlers.interactions import (
+    ConfigurationError,
+    InteractionsApp,
+    app_from_environment,
+)
 
 KEY = SigningKey.generate()
 WORKER = "cobra-bot-worker"
@@ -252,3 +256,45 @@ def test_job_round_trip() -> None:
 def test_malformed_job_is_rejected(payload: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         Job.from_payload(payload)
+
+
+# --- configuration from the environment -------------------------------------------
+
+PUBLIC_KEY = KEY.verify_key.encode().hex()
+
+
+def test_app_from_environment() -> None:
+    env = {"DISCORD_PUBLIC_KEY": PUBLIC_KEY, "WORKER_FUNCTION_NAME": WORKER}
+    fake = FakeLambda()
+
+    app = app_from_environment(env, fake)
+    app.handle(_event(_command("standings", tournament="4909")))
+
+    assert fake.calls[0]["FunctionName"] == WORKER
+
+
+@pytest.mark.parametrize(
+    ("env", "missing"),
+    [
+        ({}, "DISCORD_PUBLIC_KEY', 'WORKER_FUNCTION_NAME"),
+        ({"DISCORD_PUBLIC_KEY": PUBLIC_KEY}, "WORKER_FUNCTION_NAME"),
+        ({"WORKER_FUNCTION_NAME": WORKER}, "DISCORD_PUBLIC_KEY"),
+        (
+            {"DISCORD_PUBLIC_KEY": "  ", "WORKER_FUNCTION_NAME": WORKER},
+            "DISCORD_PUBLIC_KEY",
+        ),
+    ],
+    ids=["both-missing", "worker-missing", "key-missing", "key-blank"],
+)
+def test_missing_or_blank_variables_fail_fast(
+    env: dict[str, str], missing: str
+) -> None:
+    with pytest.raises(ConfigurationError, match=missing):
+        app_from_environment(env, FakeLambda())
+
+
+def test_invalid_public_key_fails_fast() -> None:
+    env = {"DISCORD_PUBLIC_KEY": "not-hex", "WORKER_FUNCTION_NAME": WORKER}
+
+    with pytest.raises(ConfigurationError, match="not a valid key"):
+        app_from_environment(env, FakeLambda())

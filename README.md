@@ -117,7 +117,7 @@ uv run scripts/register_commands.py
 |-------------------|---------|
 | `--dry-run` | Print the JSON payload to stdout and exit. Sends nothing and needs no credentials. |
 | `DISCORD_APPLICATION_ID` | Application ID (Developer Portal → General Information). Required without `--dry-run`. |
-| `DISCORD_BOT_TOKEN` | Bot token (Developer Portal → Bot), used only for this API call. Required without `--dry-run`. It is never printed. Keep it out of shell history, e.g. read it from SSM `/cobra-bot/discord/bot-token`. |
+| `DISCORD_BOT_TOKEN` | Bot token (Developer Portal → Bot), used only for this API call. Required without `--dry-run`. It is never printed and never deployed to AWS. Keep it out of shell history and the repository, e.g. in a password manager or a local `.env` file (git-ignored). |
 
 What it does: one `PUT https://discord.com/api/v10/applications/{id}/commands` request. Global commands can take a while to appear in Discord clients.
 

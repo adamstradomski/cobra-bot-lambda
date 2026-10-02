@@ -108,12 +108,12 @@ Exception: runs before the repo scaffold, as a standalone script; not covered by
 ## Phase 6 — Infrastructure and release
 
 ### T23 — SAM template
-- `template.yaml` per SPEC §11: two functions, Function URL, `EventInvokeConfig` (no retries), S3 bucket with lifecycle, IAM least privilege, 14-day log retention, SSM parameter names as parameters, budget USD 5 with email parameter.
+- `template.yaml` per SPEC §11: two functions, Function URL, `EventInvokeConfig` (no retries), S3 bucket with lifecycle, IAM least privilege, 14-day log retention, Discord public key as a parameter passed in an environment variable, budget USD 5 with email parameter.
 - Add `sam validate --lint` to CI.
 - **DoD:** `sam validate --lint` and `sam build` pass locally and in CI; AC-23 passes.
 
 ### T24 — Deployment guide
-- `README.md`: Discord application setup (guild + user install, no bot permissions), SSM parameters, `sam deploy --guided`, Interactions Endpoint URL, command registration, install links.
+- `README.md`: Discord application setup (guild + user install, no bot permissions), the public key parameter, `sam deploy --guided`, Interactions Endpoint URL, command registration, install links.
 - **DoD:** the author deploys to a fresh AWS account by following the README only.
 
 ### T25 — Manual acceptance test
