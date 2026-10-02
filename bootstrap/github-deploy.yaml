@@ -11,8 +11,11 @@ Description: >-
 Parameters:
   GitHubRepository:
     Type: String
-    Default: adamstradomski/cobra-bot-lambda
-    Description: owner/name of the repository allowed to deploy.
+    Default: adamstradomski@83371226/cobra-bot-lambda@1400117730
+    Description: >-
+      Repository allowed to deploy, as it appears in GitHub's OIDC subject claim:
+      owner@owner-id/name@repo-id. The IDs keep a renamed or re-created repository
+      from inheriting the role. Repository Settings, Actions, OIDC shows the prefix.
   GitHubEnvironment:
     Type: String
     Default: production
