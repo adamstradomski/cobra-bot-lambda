@@ -222,3 +222,6 @@ snapshots/
 
 # AWS SAM build output
 .aws-sam/
+
+# Per-bot SAM settings (stack name, public key, budget email)
+samconfig.local.toml
