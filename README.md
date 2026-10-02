@@ -59,7 +59,7 @@ sam build
 ```
 
 ```bash
-sam deploy --guided --config-file samconfig.local.toml
+sam deploy --guided
 ```
 
 `sam deploy --guided` asks for:
@@ -74,7 +74,8 @@ sam deploy --guided --config-file samconfig.local.toml
 | Allow SAM CLI IAM role creation | `Y` (the functions need their own roles) |
 | Disable rollback | `N` |
 | InteractionsFunction Function Url has no authentication. Is this okay? | `Y`. Discord must reach it; every request is checked against the public key instead (NFR-07). |
-| Save arguments to configuration file | `Y`. They go to `samconfig.local.toml`, which git ignores, so your email never reaches the repository. |
+| Save arguments to configuration file | `Y` |
+| SAM configuration file | **`samconfig.local.toml`**, not the default `samconfig.toml`: git ignores it, so your email never reaches the repository. (`--config-file` cannot point at it yet; SAM requires the file to exist.) |
 | SAM configuration environment | `default`, or one name per bot, e.g. `mybot` |
 
 SAM shows the change set; confirm it. When the deploy finishes, copy the output **`InteractionsEndpointUrl`**.
