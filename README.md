@@ -168,9 +168,15 @@ One-time setup:
 
    Use the values already deployed. A different public key breaks the Discord endpoint, and a different e-mail moves the budget alert.
 
-4. **Protect `main`** (**Settings → Rules → Rulesets**, or branch protection): require a pull request and the `Lint, type-check, test` check, and block force pushes.
+4. **Protect `main`** (**Settings → Rules → Rulesets → New branch ruleset**, target `main`, enforcement **Active**, empty bypass list). Select **Restrict deletions**, **Block force pushes** and **Require status checks to pass** with the check `Lint, type-check, test`. Leave **Require a pull request before merging** and **Require linear history** off: `main` is updated by pushing `develop`, which contains merge commits.
 
-5. **Check it:** merge `develop` into `main`, then follow the run under **Actions → Deploy**. The first run also records `cfn-exec-cobra-bot` as the stack's CloudFormation role.
+5. **Release:** once CI is green on `develop`, fast-forward `main` to it:
+
+   ```bash
+   git push origin develop:main
+   ```
+
+   The required status check accepts only a commit that already passed CI, so wait for the `develop` run to finish. A merge commit made locally has no checks yet and is rejected, which is why `main` is only ever fast-forwarded. Follow the deploy under **Actions → Deploy**. The first run also records `cfn-exec-cobra-bot` as the stack's CloudFormation role.
 
 Manual `sam deploy` from your machine still works. After step 5 the stack uses `cfn-exec-cobra-bot` for every update, so your own deploys also need permission to pass that role (`iam:PassRole`). An administrator has it.
 
