@@ -200,7 +200,7 @@ Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirec
 - Log groups with 14-day retention.
 - Template parameter `DiscordPublicKey` → `DISCORD_PUBLIC_KEY` on InteractionsFunction. No SSM parameters.
 - `AWS::Budgets::Budget`: USD 5/month, email alert.
-- Implementation (`template.yaml`): `python3.14` on x86_64, 256 MB for both functions, InteractionsFunction timeout 10 s; the bucket blocks public access, enforces bucket-owner object ownership and SSE-S3 encryption, and also aborts incomplete multipart uploads after 1 day; each function logs to its own log group through `LoggingConfig`; the budget alerts by email on actual and forecasted cost above 100 % (it covers the whole account, not just this stack); output `InteractionsEndpointUrl` is the Function URL for the Developer Portal. `samconfig.toml` pins the region.
+- Implementation (`template.yaml`): `python3.14` on x86_64; WorkerFunction 256 MB; InteractionsFunction 512 MB and timeout 10 s (at 256 MB a cold start took ~2.8 s, too close to Discord's 3 s limit; NFR-04); the bucket blocks public access, enforces bucket-owner object ownership and SSE-S3 encryption, and also aborts incomplete multipart uploads after 1 day; each function logs to its own log group through `LoggingConfig`; the budget alerts by email on actual and forecasted cost above 100 % (it covers the whole account, not just this stack); output `InteractionsEndpointUrl` is the Function URL for the Developer Portal. `samconfig.toml` pins the region.
 
 ## 12. Test fixtures
 

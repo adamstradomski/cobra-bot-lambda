@@ -219,3 +219,8 @@ def test_lambda_requirements_match_the_lock_file() -> None:
         "runtime dependency missing from requirements.txt"
     )
     assert {n: by_name[n]["version"] for n in runtime} == pinned
+
+
+def test_interactions_function_has_cpu_for_a_cold_start(template: Template) -> None:
+    """NFR-04: at 256 MB a cold start missed Discord's 3 s acknowledgement limit."""
+    assert _props(template, "InteractionsFunction")["MemorySize"] == 512

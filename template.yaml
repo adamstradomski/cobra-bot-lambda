@@ -100,6 +100,9 @@ Resources:
       Description: Discord interactions endpoint; verifies, acknowledges, delegates.
       Handler: cobra_bot.handlers.interactions.handler
       Timeout: 10
+      # More memory means more CPU: at 256 MB a cold start (importing boto3, creating
+      # the Lambda client) took ~2.8 s, past Discord's 3 s acknowledgement limit.
+      MemorySize: 512
       LoggingConfig:
         LogGroup:
           Ref: InteractionsLogGroup
