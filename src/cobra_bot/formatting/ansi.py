@@ -1,27 +1,22 @@
-"""Colours for tables in Discord ```ansi code blocks (SPEC §9; embed format C-5).
+"""Colours for tables in Discord ```ansi code blocks (SPEC §9; embed format §1.1).
 
 Discord renders a small set of SGR codes in its own fixed palette, which differs
 between themes. Never use `30` (black on the dark code-block background); `37` is
-dimmer than the default text, so it serves as the secondary colour. Mobile
-clients show the text uncoloured; the columns still line up because a code block
-uses a monospaced font.
+dimmer than the default text, so it serves as the secondary colour. `1` keeps the
+previous colour, so bold default text is always `0` then `1` (A-0). Mobile clients
+drop the colours, so no information depends on colour alone (C-6).
 """
 
-HEADING = "1;37"  # column headings
-MUTED = "0;37"  # rank, table, SoS, rules, the losing player
-STRONG = "1"  # player in standings, the winning player: bold, default colour
-PLAIN = "0"  # player without a decided result (ID, unreported, bye)
-SCORE = "1;33"  # points, scores
-CORP = "0;34"  # Corp ID
-RUNNER = "0;35"  # Runner ID
+PRIMARY = "\x1b[0m"  # rank, table label, a player without a decided result
+STRONG = "\x1b[0m\x1b[1m"  # player in standings, the winner: bold, default colour
+SECONDARY = "\x1b[0;37m"  # header, rule, SoS, the loser, `·`, an unknown ID
+SCORE = "\x1b[1;33m"  # points
+CORP = "\x1b[0;34m"  # Corp ID, the `C` tag
+RUNNER = "\x1b[0;35m"  # Runner ID, the `R` tag
 
-RESET = "\x1b[0m"
+RESET = "\x1b[0m"  # ends every line (A-0)
 RULE = "─"
 
 
-def sgr(style: str) -> str:
-    return f"\x1b[{style}m"
-
-
 def rule(width: int) -> str:
-    return f"{sgr(MUTED)}{RULE * width}{RESET}"
+    return f"{SECONDARY}{RULE * width}{RESET}"

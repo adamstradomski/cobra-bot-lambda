@@ -21,10 +21,11 @@ _MARKDOWN = re.compile(r"([\\*_~`|>#\-\[\]()<:])")
 _WHITESPACE = re.compile(r"\s+")
 # A nickname in straight or curly quotes: René "Loup" Arcemont -> Loup.
 _NICKNAME = re.compile(r"[\"“]([^\"“”]+)[\"”]")
-# Stands in for a backtick, which would close the code block around a name (C-8).
+# Stands in for a backtick, which would close the code block around a name (C-7).
 _BACKTICK_STANDIN = "'"
 ELLIPSIS = "…"
 ID_WIDTH = 9  # columns for a short ID (A-1)
+NAME_WIDTH = 15  # columns for a player name (C-7)
 
 type TimestampStyle = Literal["t", "T", "d", "D", "f", "F", "R"]
 
@@ -53,7 +54,7 @@ def code_text(text: str) -> str:
 
 
 def display_width(text: str) -> int:
-    """Columns `text` takes in a monospaced font (C-6).
+    """Columns `text` takes in a monospaced font (C-5).
 
     Combining marks take none; wide and full-width characters (CJK, most emoji)
     take two; everything else, including letters with diacritics, one.
@@ -98,8 +99,8 @@ def short_identity(identity: str | None) -> str:
 
 @cache
 def corp_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Corp ID from the map, else the full name, cut to
-    9 columns. A missing entry is logged once per ID and process."""
+    """FR-08, A-1–A-2: the short Corp ID from the map, else the name before `:`,
+    cut to 9 columns. A missing entry is logged once per ID and process."""
     short = short_identity(identity)
     if short == messages.UNKNOWN_IDENTITY:
         return short

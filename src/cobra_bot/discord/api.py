@@ -91,7 +91,7 @@ class WebhookClient:
 
     def send_text(self, token: str, text: str) -> None:
         """A single-embed reply, e.g. an error message, in place of the deferral:
-        one sentence, no code block, in the bot colour (embed format C-2, C-14)."""
+        one sentence, no code block, in the bot colour (embed format C-2, C-12)."""
         self.edit_original(
             token, message_payload([Embed(description=text, color=EMBED_COLOR)])
         )

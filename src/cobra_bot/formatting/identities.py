@@ -20,6 +20,7 @@ CORP_SHORT_NAMES: dict[str, str] = {
     "Issuaq Adaptics": "Issuaq",
     "Earth Station": "Earth St.",
     "Synapse Global": "Synapse",
+    "GameNET": "GameNET",
     # Seen in the test fixtures
     "Epiphany Analytica": "Epiphany",
     "Hyoubu Institute": "Hyoubu",
@@ -46,6 +47,7 @@ RUNNER_SHORT_NAMES: dict[str, str] = {
     "Zahya Sadeghi": "Zahya",
     "Captain Padma Isbister": "Padma",
     'Barry "Baz" Wong': "Baz",
+    'Hiram "0mission" Svensson': "0mission",
     # Seen in the test fixtures
     "The Catalyst": "Catalyst",
     "Nova Initiumia": "Nova",

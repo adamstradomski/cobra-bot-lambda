@@ -75,7 +75,7 @@ COMBINING_DIAERESIS = chr(0x0308)
         ("@Mention", "@Mention"),  # pings are blocked by allowed_mentions (AC-21)
         ("*bold_name~", "*bold_name~"),  # markdown does not render in code blocks
         (r"back\slash", r"back\slash"),
-        ("a`b", "a'b"),  # C-8
+        ("a`b", "a'b"),  # C-7
         ("```@everyone", "'''@everyone"),
         (f"red{ESC}[1;31mname", "red[1;31mname"),
         (f"bell{chr(7)}zero{chr(0x200B)}width", "bellzerowidth"),
@@ -108,7 +108,7 @@ def test_code_text(name: str, safe: str) -> None:
     ("text", "width"),
     [
         ("abc", 3),
-        ("Żółw", 4),  # diacritics take one column (C-6)
+        ("Żółw", 4),  # diacritics take one column (C-5)
         (f"Mae{COMBINING_DIAERESIS}lig", 6),  # combining marks take none
         (f"a{CJK}b", 4),  # wide characters take two
         (f"a{EMOJI}b", 4),
@@ -173,7 +173,8 @@ def test_corp_label(identity: str | None, label: str) -> None:
         ("Arissana Rocha Nahu: Street Artist", "Arissana"),
         ('René "Loup" Arcemont: Party Animal', "Loup"),
         ("Captain Padma Isbister: Intrepid Explorer", "Padma"),
-        ('Hiram "0mission" Svensson: X', "0mission"),  # fallback: the nickname
+        ('Hiram "0mission" Svensson: X', "0mission"),  # A-3
+        ('Kim "Ghost" Lee: X', "Ghost"),  # fallback: the nickname
         ("Ken “Express” Tenma: Disappeared Clone", "Express"),  # curly quotes
         ('Ken "" Tenma: Disappeared Clone', "Ken"),  # empty nickname: first word
         ("Virtual Intelligence, P.I.: X", "Virtual"),  # first word, comma dropped

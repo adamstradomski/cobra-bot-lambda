@@ -1,5 +1,7 @@
 from collections.abc import Callable
 
+import pytest
+
 from builders import (
     FETCHED_AT,
     FETCHED_AT_TAG,
@@ -21,12 +23,18 @@ from cobra_bot.formatting.standings import (
 type LoadRaw = Callable[[str], object]
 
 ESC = chr(0x1B)
+PRIMARY, STRONG, SECONDARY = f"{ESC}[0m", f"{ESC}[0m{ESC}[1m", f"{ESC}[0;37m"
+SCORE, CORP, RUNNER = f"{ESC}[1;33m", f"{ESC}[0;34m", f"{ESC}[0;35m"
 
 
 def _view(t: Tournament) -> StandingsView:
     view = standings_view(t)
     assert isinstance(view, StandingsView)
     return view
+
+
+def _lines(text: str) -> list[str]:
+    return plain(text).split("\n")
 
 
 def test_ac01_finished_tournament(raw_fixture: LoadRaw) -> None:
@@ -36,12 +44,15 @@ def test_ac01_finished_tournament(raw_fixture: LoadRaw) -> None:
     doc = format_standings(t, _view(t))
 
     assert doc.header == ("**Standings after round 8**", f"Data from {FETCHED_AT_TAG}")
-    assert plain(doc.entries[0].text).startswith(" 1  Player0042       22  ")
+    assert _lines(doc.entries[0].text) == [
+        " 1 Player0042       22  1.821",
+        "   Nuvem · Arissana",
+    ]
     assert len(doc.entries) == 46
     assert doc.url == (
         "https://tournaments.nullsignal.games/tournaments/4909/players/standings"
     )
-    assert doc.footer == "Round 8 · 46 players · Pts / SoS / Corp / Runner"
+    assert doc.footer == "Round 8 · 46 players · Corp · Runner on 2nd line"
 
 
 def test_ac08_no_completed_round_lists_players_in_rank_order() -> None:
@@ -51,11 +62,12 @@ def test_ac08_no_completed_round_lists_players_in_rank_order() -> None:
 
     assert doc.header[0] == "**No completed rounds yet**"
     assert [plain(e.text).split()[1] for e in doc.entries] == ["Alice", "Bob"]
-    assert doc.footer == "2 players · Pts / SoS / Corp / Runner"
+    assert doc.footer == "2 players · Corp · Runner on 2nd line"
 
 
-def test_row_format() -> None:
-    """Column layout and colours as in the design."""
+def test_row_layout_and_colours() -> None:
+    """S-1, S-2: rank, bold name, yellow points, grey SoS; then blue Corp, grey
+    `·`, pink Runner. Every line ends with a reset (A-0)."""
     p = player(
         1,
         "Alice",
@@ -67,27 +79,30 @@ def test_row_format() -> None:
     )
 
     assert standings_row(p) == (
-        f"{ESC}[0;37m 1  {ESC}[1mAlice           {ESC}[1;33m 22  "
-        f"{ESC}[0;37m1.821  {ESC}[0;34mNuvem     {ESC}[0;35mArissana{ESC}[0m"
+        f"{PRIMARY} 1 {STRONG}Alice           {SCORE} 22  {SECONDARY}1.821{PRIMARY}\n"
+        f"   {CORP}Nuvem{SECONDARY} · {RUNNER}Arissana{PRIMARY}"
     )
 
 
-def test_columns() -> None:
-    heading, rule = standings_columns()
+def test_header_and_rule_are_secondary() -> None:
+    """S-2: the rule is 2 columns wider than the header, as wide as a row."""
+    header, rule = standings_columns()
 
-    assert heading == (
-        f"{ESC}[1;37m #  Player          Pts  SoS    Corp      Runner{ESC}[0m"
-    )
-    assert plain(rule) == "─" * 51
+    assert header == f"{SECONDARY} # Player          Pts  SoS{PRIMARY}"
+    assert rule == f"{SECONDARY}{'─' * 29}{PRIMARY}"
 
 
 def test_sos_is_shown_with_three_decimals() -> None:
-    assert " 3.750  " in plain(standings_row(player(1, sos="3.75")))
-    assert " 0.000  " in plain(standings_row(player(1, sos="0")))
+    assert _lines(standings_row(player(1, sos="3.75")))[0].endswith("  3.750")
+    assert _lines(standings_row(player(1, sos="0")))[0].endswith("  0.000")
 
 
-def test_missing_identities_show_placeholder() -> None:
-    assert plain(standings_row(player(1, "Bob", rank=12))).endswith("—         —")
+def test_missing_identities_show_a_secondary_dash() -> None:
+    """A-4."""
+    row = standings_row(player(1, "Bob", rank=12))
+
+    assert _lines(row)[1] == "   — · —"
+    assert row.split("\n")[1] == f"   {SECONDARY}—{SECONDARY} · {SECONDARY}—{PRIMARY}"
 
 
 def test_names_are_literal_in_the_code_block() -> None:
@@ -95,24 +110,28 @@ def test_names_are_literal_in_the_code_block() -> None:
     assert " *bold_name~ " in plain(standings_row(player(1, "*bold_name~")))
 
 
-def test_long_name_is_cut_to_the_column() -> None:
-    """C-7: names longer than 16 columns become 15 columns plus `…`."""
-    at_limit = plain(standings_row(player(1, "A" * 16, points=22)))
-    over = plain(standings_row(player(1, "A" * 17, points=22)))
+@pytest.mark.parametrize(
+    ("length", "shown"),
+    [(14, "A" * 14 + "  "), (15, "A" * 15 + " "), (16, "A" * 14 + "… ")],
+    ids=["below-limit", "at-limit", "one-above"],
+)
+def test_long_names_are_cut_to_15_columns(length: int, shown: str) -> None:
+    """C-7: names longer than 15 columns become 14 columns plus `…`."""
+    row = _lines(standings_row(player(1, "A" * length, points=22)))[0]
 
-    assert f" {'A' * 16} 22  " in at_limit
-    assert f" {'A' * 15}… 22  " in over
+    assert row == f" 1 {shown} 22  0.000"
 
 
 def test_wide_characters_keep_the_columns_aligned() -> None:
-    """C-6 / acceptance 4: padding counts display width, not characters."""
+    """C-5: padding counts display width, not characters."""
     emoji = chr(0x1F600)
-    row = plain(standings_row(player(1, f"{emoji}Ace", points=22)))
+    row = _lines(standings_row(player(1, f"{emoji}Ace", points=22)))[0]
 
-    assert row.startswith(f" 1  {emoji}Ace{' ' * 11} 22  ")
+    assert row == f" 1 {emoji}Ace{' ' * 11} 22  0.000"
 
 
 def test_blank_line_between_point_groups() -> None:
+    """S-5."""
     players = (
         player(1, rank=1, points=6),
         player(2, rank=2, points=3),
@@ -129,6 +148,7 @@ def test_blank_line_between_point_groups() -> None:
 
 
 def test_three_digit_ranks_widen_the_rank_column() -> None:
+    """S-3: for the whole table, including the header, rule and ID lines."""
     players = tuple(player(i, rank=i) for i in range(1, 101))
     t = tournament(
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=players
@@ -136,10 +156,13 @@ def test_three_digit_ranks_widen_the_rank_column() -> None:
 
     doc = format_standings(t, _view(t))
 
-    assert plain(doc.columns[0]).startswith("  #  Player")
-    assert plain(doc.entries[0].text).startswith("  1  Player1 ")
-    assert plain(doc.entries[-1].text).startswith("100  Player100 ")
-    assert plain(doc.columns[1]) == "─" * 52
+    assert plain(doc.columns[0]) == "  # Player          Pts  SoS"
+    assert plain(doc.columns[1]) == "─" * 30
+    assert _lines(doc.entries[0].text) == [
+        "  1 Player1           0  0.000",
+        "    — · —",
+    ]
+    assert _lines(doc.entries[-1].text)[0].startswith("100 Player100 ")
 
 
 def test_stale_private_notice() -> None:
