@@ -24,6 +24,8 @@ from cobra_bot.discord.api import DiscordError, WebhookClient
 
 log = logging.getLogger(__name__)
 
+CACHE_BUCKET_ENV = "CACHE_BUCKET"
+
 type Event = Mapping[str, Any]  # Any: Lambda events are untyped JSON
 type WebhookFactory = Callable[[str], WebhookClient]  # application ID -> client
 
@@ -73,7 +75,7 @@ _app: WorkerApp | None = None
 def _app_from_environment() -> WorkerApp:  # pragma: no cover - needs AWS
     import boto3  # type: ignore[import-untyped]  # provided by the Lambda runtime
 
-    store = S3CacheStore(boto3.client("s3"), os.environ["CACHE_BUCKET"])
+    store = S3CacheStore(boto3.client("s3"), os.environ[CACHE_BUCKET_ENV])
     cache = TournamentCache(
         store, cobra.CobraClient(cobra.make_http_client()), clock=utc_now
     )

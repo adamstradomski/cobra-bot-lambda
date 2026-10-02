@@ -1,0 +1,17 @@
+# SAM CLI defaults shared by everyone. Bot-specific values (stack name, public key,
+# budget email) are passed at deploy time, not committed; see README.md.
+version = 0.1
+
+[default.global.parameters]
+region = "eu-central-1"
+
+[default.build.parameters]
+cached = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
+confirm_changeset = true

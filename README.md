@@ -14,7 +14,19 @@ Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned 
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
 
-All four checks must pass before a change is merged. GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs them on every push and pull request, after `uv sync --locked`, which fails if `uv.lock` is out of date with `pyproject.toml`.
+All four checks must pass before a change is merged. GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs them on every push and pull request, after `uv sync --locked`, which fails if `uv.lock` is out of date with `pyproject.toml`; it then runs `sam validate --lint` and `sam build`.
+
+### Infrastructure (AWS SAM)
+
+[`template.yaml`](template.yaml) defines the stack (SPEC §11). [`samconfig.toml`](samconfig.toml) holds the shared defaults: region `eu-central-1`, lint on validate, cached builds, and IAM capability with a change-set prompt on deploy. SAM CLI can run without installing it, through `uvx --from aws-sam-cli==1.166.2 sam …`, as CI does. Set `SAM_CLI_TELEMETRY=0` to opt out of SAM's telemetry.
+
+| Command | What it does |
+|---------|--------------|
+| `sam validate --lint` | Checks the template with the SAM translator and cfn-lint. Needs no AWS credentials. |
+| `sam build` | Builds both functions from `src/` into `.aws-sam/build/` (git-ignored). It installs `src/requirements.txt` with Linux wheels for the Lambda runtime and needs `python3.14` on `PATH`. |
+| `uv export --frozen --no-dev --no-hashes --no-emit-project --no-header --format requirements.txt -o src/requirements.txt` | Regenerates the Lambda dependency list from `uv.lock`. Run it after changing runtime dependencies; `tests/test_template.py` fails while the file is out of date. |
+
+Deployment (`sam deploy`) is covered in the deployment guide (T24).
 
 ## Scripts
 

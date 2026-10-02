@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Cobra Discord bot: pairings and standings from Cobra tournaments (SPEC §11).
+  Long-form intrinsics (Ref, Fn::GetAtt) keep this file readable by plain YAML
+  parsers, which the template tests rely on.
+
+Parameters:
+  DiscordPublicKey:
+    Type: String
+    Description: >-
+      Discord application public key, hex (Developer Portal, General Information).
+      Not a secret: it only verifies request signatures.
+    AllowedPattern: "^[0-9a-fA-F]{64}$"
+    ConstraintDescription: 64 hexadecimal characters.
+  BudgetEmail:
+    Type: String
+    Description: Email address for the monthly budget alert (NFR-13).
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    ConstraintDescription: an email address.
+
+Globals:
+  Function:
+    Runtime: python3.14
+    Architectures:
+      - x86_64
+    CodeUri: src/
+    MemorySize: 256
+
+Resources:
+  CacheBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireCache
+            Status: Enabled
+            ExpirationInDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 14
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Runs a deferred /cobra command and sends the reply.
+      Handler: cobra_bot.handlers.worker.handler
+      Timeout: 30
+      LoggingConfig:
+        LogGroup:
+          Ref: WorkerLogGroup
+      Environment:
+        Variables:
+          CACHE_BUCKET:
+            Ref: CacheBucket
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: CacheObjects
+              Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource:
+                Fn::Sub: "${CacheBucket.Arn}/*"
+            - Sid: MissingKeyIs404
+              Effect: Allow
+              Action: s3:ListBucket
+              Resource:
+                Fn::GetAtt: CacheBucket.Arn
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        MaximumEventAgeInSeconds: 600
+
+  InteractionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 14
+
+  InteractionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Discord interactions endpoint; verifies, acknowledges, delegates.
+      Handler: cobra_bot.handlers.interactions.handler
+      Timeout: 10
+      LoggingConfig:
+        LogGroup:
+          Ref: InteractionsLogGroup
+      Environment:
+        Variables:
+          DISCORD_PUBLIC_KEY:
+            Ref: DiscordPublicKey
+          WORKER_FUNCTION_NAME:
+            Ref: WorkerFunction
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName:
+              Ref: WorkerFunction
+      FunctionUrlConfig:
+        AuthType: NONE
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName:
+          Fn::Sub: "${AWS::StackName}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 5
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address:
+                Ref: BudgetEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address:
+                Ref: BudgetEmail
+
+Outputs:
+  InteractionsEndpointUrl:
+    Description: Paste into Discord Developer Portal, Interactions Endpoint URL.
+    Value:
+      Fn::GetAtt: InteractionsFunctionUrl.FunctionUrl
+  CacheBucketName:
+    Description: S3 bucket of the shared tournament cache.
+    Value:
+      Ref: CacheBucket

@@ -219,3 +219,6 @@ __marimo__/
 
 # Raw Cobra tournament snapshots (T01): not anonymised, never commit
 snapshots/
+
+# AWS SAM build output
+.aws-sam/
