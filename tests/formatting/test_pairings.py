@@ -14,16 +14,14 @@ from builders import (
 from cobra_bot.cobra.parser import parse_tournament
 from cobra_bot.domain.models import Pairing, Tournament
 from cobra_bot.domain.rounds import PairingsView, pairings_view
-from cobra_bot.formatting.pairings import (
-    format_pairings,
-    pairing_rows,
-    pairings_columns,
-)
+from cobra_bot.formatting.pairings import format_pairings, pairing_rows
+from cobra_bot.formatting.text import display_width
 
 type LoadRaw = Callable[[str], object]
 
 ESC = chr(0x1B)
-STRONG, MUTED, PLAIN = f"{ESC}[1m", f"{ESC}[0;37m", f"{ESC}[0m"
+PRIMARY, STRONG, SECONDARY = f"{ESC}[0m", f"{ESC}[0m{ESC}[1m", f"{ESC}[0;37m"
+SCORE, CORP, RUNNER = f"{ESC}[1;33m", f"{ESC}[0;34m", f"{ESC}[0;35m"
 
 ALICE = player(1, "Alice", corp="Nuvem SA: Law of the Land", runner="Arissana: Artist")
 BOB = player(2, "Bob", corp="Haas-Bioroid: Precision", runner="Zahya: Mercenary")
@@ -44,8 +42,12 @@ def _t() -> Tournament:
     return tournament(players=(ALICE, BOB, CAROL))
 
 
-def _rows(p: Pairing) -> list[str]:
-    return plain(pairing_rows(_t(), p)).split("\n")
+def _rows(p: Pairing, t: Tournament | None = None) -> list[str]:
+    return plain(pairing_rows(t or _t(), p)).split("\n")
+
+
+def _ansi_rows(p: Pairing) -> list[str]:
+    return pairing_rows(_t(), p).split("\n")
 
 
 # --- acceptance criteria -----------------------------------------------------------
@@ -55,7 +57,7 @@ def test_ac02_round_1_table_21_is_a_bye(raw_fixture: LoadRaw) -> None:
     t = _fixture(raw_fixture, "single_sided_top8")
     doc = format_pairings(t, _view(t, 1))
 
-    assert "T21 Player0023       BYE" in [plain(e.text) for e in doc.entries]
+    assert "T21 BYE Player0023" in [plain(e.text) for e in doc.entries]
 
 
 def test_ac03_default_pairings_header(raw_fixture: LoadRaw) -> None:
@@ -69,84 +71,86 @@ def test_ac03_default_pairings_header(raw_fixture: LoadRaw) -> None:
     )
     assert doc.title == "Single-Sided Top 8 Fixture"
     assert doc.url == "https://tournaments.nullsignal.games/tournaments/4909"
-    assert doc.footer == (
-        "Round 8 · 23 tables · Corp left, Runner right · score from Corp side"
-    )
+    assert doc.footer == ("Round 8 · 23 tables · Corp first · number = points scored")
 
 
 def test_ac22_double_sided_pairing_shows_both_games(raw_fixture: LoadRaw) -> None:
-    t = _fixture(raw_fixture, "dss")
+    t = _fixture(raw_fixture, "dss", 5018)
     doc = format_pairings(t, _view(t, 1))
-    games = [plain(e.text) for e in doc.entries if "BYE" not in e.text]
+    tables = [plain(e.text) for e in doc.entries if "BYE" not in e.text]
 
-    assert len(games) == 15
-    for entry in games:
-        total, game1, ids1, game2, ids2 = entry.split("\n")
-        assert total.startswith("T")
-        assert game1.startswith("↳ ")
-        assert game2.startswith("↳ ")
-        assert ids1.startswith("    ")
-        assert ids2.startswith("    ")
+    assert len(tables) == 15
+    for entry in tables:
+        name1, games1, name2, games2 = entry.split("\n")
+        assert name1.startswith("T")
+        assert name2.startswith("    ")
+        assert games1.startswith("      C ")
+        assert games2.startswith("      R ")
+    assert doc.footer == (
+        "Round 1 · 16 tables · double-sided · columns = game 1 | game 2"
+    )
 
 
 def test_ac07_in_progress_header(raw_fixture: LoadRaw) -> None:
-    t = _fixture(raw_fixture, "dss")
+    t = _fixture(raw_fixture, "dss", 5018)
     doc = format_pairings(t, _view(t))
 
     assert doc.header[0] == "**Round 3 pairings — in progress**"
 
 
-# --- rows ---------------------------------------------------------------------------
+# --- single-sided -------------------------------------------------------------------
 
 
-def test_columns() -> None:
-    heading, rule = pairings_columns()
-
-    assert heading == f"{ESC}[1;37mT   Corp            Score Runner{ESC}[0m"
-    assert plain(rule) == "─" * 44
-
-
-def test_single_sided_corp_won() -> None:
-    """Layout and colours as in the design: the winner bold white, the loser grey."""
+def test_single_sided_layout_and_colours() -> None:
+    """SS-1, SS-2, P-2, P-3: Corp first; the winner bold, the loser secondary."""
     p = pairing(3, seat(1, "corp", 3), seat(2, "runner", 0))
 
     assert pairing_rows(_t(), p) == (
-        f"{MUTED}T3  {STRONG}Alice           {ESC}[1;33m 3–0  {MUTED}Bob{ESC}[0m\n"
-        f"    {ESC}[0;34mNuvem                 {ESC}[0;35mZahya{ESC}[0m"
+        f"{PRIMARY}T3  {SCORE} 3 {STRONG}Alice{SECONDARY} · {CORP}Nuvem{PRIMARY}\n"
+        f"{PRIMARY}    {SCORE} 0 {SECONDARY}Bob{SECONDARY} · {RUNNER}Zahya{PRIMARY}"
     )
 
 
-def test_runner_in_seat_1_is_shown_on_the_right() -> None:
-    p = pairing(3, seat(1, "runner", 3), seat(2, "corp", 0))
+def test_runner_in_seat_1_is_shown_second() -> None:
+    """Acceptance 5: `Inermis (Runner) 0–3 Minstrel (Corp)` puts Minstrel first."""
+    t = tournament(players=(player(1, "Inermis"), player(2, "Minstrel")))
+    p = pairing(3, seat(1, "runner", 0), seat(2, "corp", 3))
 
-    rows = pairing_rows(_t(), p)
+    rows = pairing_rows(t, p).split("\n")
 
-    assert plain(rows).split("\n") == [
-        "T3  Bob              0–3  Alice",
-        "    HB                    Arissana",
-    ]
-    assert f"{MUTED}Bob " in rows
-    assert f"{STRONG}Alice" in rows
+    assert [plain(r) for r in rows] == ["T3   3 Minstrel · —", "     0 Inermis · —"]
+    assert f"{STRONG}Minstrel" in rows[0]
+    assert f"{SECONDARY}Inermis" in rows[1]
 
 
-def test_unreported_shows_vs_and_plain_names() -> None:
+def test_unreported_shows_a_dash_and_plain_names() -> None:
     p = pairing(3, seat(2, "corp"), seat(1, "runner"))
 
-    rows = pairing_rows(_t(), p)
+    rows = _ansi_rows(p)
 
-    assert plain(rows).split("\n")[0] == "T3  Bob               vs  Alice"
-    assert f"{PLAIN}Bob " in rows
-    assert f"{PLAIN}Alice" in rows
+    assert [plain(r) for r in rows] == ["T3   – Bob · HB", "     – Alice · Arissana"]
+    assert f"{PRIMARY}Bob" in rows[0]
+    assert f"{PRIMARY}Alice" in rows[1]
 
 
 def test_intentional_draw_shows_id_and_plain_names() -> None:
     p = pairing(5, seat(1, "corp", 1), seat(2, "runner", 1), intentional_draw=True)
 
-    rows = pairing_rows(_t(), p)
+    rows = _ansi_rows(p)
 
-    assert plain(rows).split("\n")[0] == "T5  Alice             ID  Bob"
-    assert f"{PLAIN}Alice " in rows
-    assert f"{PLAIN}Bob" in rows
+    assert [plain(r) for r in rows] == ["T5  ID Alice · Nuvem", "    ID Bob · Zahya"]
+    assert f"{PRIMARY}Alice" in rows[0]
+    assert f"{PRIMARY}Bob" in rows[1]
+
+
+def test_equal_points_leave_both_names_plain() -> None:
+    """P-2: a modified or split result without a winner."""
+    p = pairing(5, seat(1, "corp", 1), seat(2, "runner", 1))
+
+    rows = _ansi_rows(p)
+
+    assert f"{SCORE} 1 {PRIMARY}Alice" in rows[0]
+    assert f"{SCORE} 1 {PRIMARY}Bob" in rows[1]
 
 
 @pytest.mark.parametrize(
@@ -158,84 +162,159 @@ def test_intentional_draw_shows_id_and_plain_names() -> None:
     ids=["player2-empty", "player1-empty"],
 )
 def test_bye(bye: Pairing) -> None:
-    assert _rows(bye) == ["T21 Carol            BYE"]
+    """P-4: one line; which ID to show is TBD, so none is shown."""
+    assert _rows(bye) == ["T21 BYE Carol"]
 
 
-def test_missing_identity_shows_placeholder() -> None:
+def test_missing_identity_shows_a_secondary_dash() -> None:
+    """A-4."""
     p = pairing(1, seat(3, "corp", 3), seat(1, "runner", 0))
 
-    assert _rows(p)[1] == "    —                     Arissana"
+    rows = _ansi_rows(p)
+
+    assert plain(rows[0]) == "T1   3 Carol · —"
+    assert rows[0].endswith(f"{SECONDARY} · {SECONDARY}—{PRIMARY}")
 
 
 def test_unknown_player_id() -> None:
     p = pairing(1, seat(99, "corp"), seat(1, "runner"))
 
-    assert _rows(p)[0] == "T1  Unknown player    vs  Alice"
-
-
-def test_double_sided_entry() -> None:
-    """Seat 1 won as Corp, seat 2 won as Corp: 3–3 split."""
-    p = pairing(
-        4,
-        seat(1, None, 3, corp=3, runner=0),
-        seat(2, None, 3, corp=3, runner=0),
-    )
-
-    assert _rows(p) == [
-        "T4  Alice            3–3  Bob",
-        "↳   Alice            3–0  Bob",
-        "    Nuvem                 Zahya",
-        "↳   Bob              3–0  Alice",
-        "    HB                    Arissana",
-    ]
-
-
-def test_double_sided_one_game_reported() -> None:
-    p = pairing(4, seat(1, None, 3, corp=3), seat(2, None, 0, runner=0))
-
-    rows = _rows(p)
-
-    assert rows[1] == "↳   Alice            3–0  Bob"
-    assert rows[3] == "↳   Bob               vs  Alice"
+    assert _rows(p)[0] == "T1   – Unknown player · —"
 
 
 def test_names_are_literal_and_cannot_close_the_code_block() -> None:
-    """AC-21 data: markdown stays literal in a code block; C-8: ` -> '."""
+    """AC-21 data: markdown stays literal in a code block; C-7: ` -> '."""
     t = tournament(players=(player(1, "*bold_name~"), player(2, "```@everyone")))
     p = pairing(1, seat(1, "corp", 3), seat(2, "runner", 0))
 
-    first = plain(pairing_rows(t, p)).split("\n")[0]
-
-    assert first == "T1  *bold_name~      3–0  '''@everyone"
+    assert [r.split(" · ")[0] for r in _rows(p, t)] == [
+        "T1   3 *bold_name~",
+        "     0 '''@everyone",
+    ]
 
 
 @pytest.mark.parametrize(
     ("length", "shown"),
-    [(16, "A" * 16), (17, "A" * 15 + "…")],
+    [(15, "A" * 15), (16, "A" * 14 + "…")],
     ids=["at-limit", "one-above"],
 )
-def test_long_names_are_cut_to_the_column(length: int, shown: str) -> None:
-    """C-7: names longer than 16 columns become 15 columns plus `…`."""
-    t = tournament(players=(player(1, "A" * length), player(2, "B" * length)))
+def test_long_names_are_cut_to_15_columns(length: int, shown: str) -> None:
+    """C-7: names longer than 15 columns become 14 columns plus `…`."""
+    t = tournament(players=(player(1, "A" * length), player(2, "Bob")))
     p = pairing(1, seat(1, "corp", 3), seat(2, "runner", 0))
 
-    first = plain(pairing_rows(t, p)).split("\n")[0]
-
-    assert first == f"T1  {shown} 3–0  {shown.replace('A', 'B')}"
+    assert _rows(p, t)[0] == f"T1   3 {shown} · —"
 
 
-def test_wide_characters_keep_the_score_column_aligned() -> None:
-    """C-6 / acceptance 4: padding counts display width, not characters."""
+def test_longest_single_sided_line_is_34_columns() -> None:
+    """C-5, SS-2: a 15-column name and a 9-column ID fill the line exactly."""
+    t = tournament(players=(player(1, "A" * 15, corp="Editorial Division: X"),))
+    p = pairing(10, seat(1, "corp", 3), seat(2, "runner", 0))
+
+    assert display_width(_rows(p, t)[0]) == 34
+
+
+def test_wide_characters_count_two_columns_towards_the_name_limit() -> None:
+    """C-5, acceptance 9: an emoji name is cut by display width, not characters."""
     emoji = chr(0x1F600)
-    t = tournament(players=(player(1, f"{emoji}Ace"), player(2, "Bob")))
-    p = pairing(1, seat(1, "corp", 3), seat(2, "runner", 0))
+    t = tournament(players=(player(1, emoji * 8, corp="Editorial Division: X"),))
+    p = pairing(10, seat(1, "corp", 3), seat(2, "runner", 0))
 
-    first = plain(pairing_rows(t, p)).split("\n")[0]
+    first = _rows(p, t)[0]
 
-    assert first == f"T1  {emoji}Ace{' ' * 11} 3–0  Bob"
+    assert first == f"T10  3 {emoji * 7}… · Editorial"
+    assert display_width(first) == 34
 
 
-def test_entries_are_sorted_by_table_and_header_has_no_top_cut_note() -> None:
+# --- double-sided -------------------------------------------------------------------
+
+
+def test_double_sided_layout() -> None:
+    """Acceptance 6, DS-1–DS-4: seat 1 is Corp in game 1; the columns are games."""
+    p = pairing(
+        1,
+        seat(1, None, 3, corp=0, runner=3),
+        seat(3, None, 3, corp=0, runner=3),
+    )
+
+    assert _rows(p) == [
+        "T1   3 Alice",
+        "      C Nuvem     0  R Arissana  3",
+        "     3 Carol",
+        "      R —         3  C —         0",
+    ]
+
+
+def test_double_sided_colours() -> None:
+    """DS-3: tag and ID in the side colour, an unknown ID secondary, points yellow;
+    P-2: the round winner bold."""
+    p = pairing(
+        1,
+        seat(1, None, 6, corp=3, runner=3),
+        seat(3, None, 0, corp=0, runner=0),
+    )
+
+    name1, games1, name2, games2 = _ansi_rows(p)
+
+    assert name1 == f"{PRIMARY}T1  {SCORE} 6 {STRONG}Alice{PRIMARY}"
+    assert games1 == (
+        f"      {CORP}C {CORP}Nuvem     {SCORE}3{PRIMARY}  "
+        f"{RUNNER}R {RUNNER}Arissana  {SCORE}3{PRIMARY}"
+    )
+    assert name2 == f"{PRIMARY}    {SCORE} 0 {SECONDARY}Carol{PRIMARY}"
+    assert games2 == (
+        f"      {RUNNER}R {SECONDARY}—         {SCORE}0{PRIMARY}  "
+        f"{CORP}C {SECONDARY}—         {SCORE}0{PRIMARY}"
+    )
+
+
+def test_double_sided_without_results() -> None:
+    """Acceptance 7: every point is `–`; both players plain, not bold."""
+    p = pairing(2, seat(1, None), seat(2, None))
+
+    rows = _ansi_rows(p)
+
+    assert [plain(r) for r in rows] == [
+        "T2   – Alice",
+        "      C Nuvem     –  R Arissana  –",
+        "     – Bob",
+        "      R Zahya     –  C HB        –",
+    ]
+    assert f"{PRIMARY}Alice" in rows[0]
+    assert f"{PRIMARY}Bob" in rows[2]
+
+
+def test_double_sided_one_game_reported() -> None:
+    """DS-4: the round total counts the reported game."""
+    p = pairing(4, seat(1, None, 3, corp=3), seat(2, None, 0, runner=0))
+
+    assert _rows(p) == [
+        "T4   3 Alice",
+        "      C Nuvem     3  R Arissana  –",
+        "     0 Bob",
+        "      R Zahya     0  C HB        –",
+    ]
+
+
+def test_double_sided_intentional_draw_shows_id() -> None:
+    p = pairing(
+        4,
+        seat(1, None, 3, corp=3, runner=0),
+        seat(2, None, 3, corp=3, runner=0),
+        intentional_draw=True,
+    )
+
+    rows = _rows(p)
+
+    assert rows[0] == "T4  ID Alice"
+    assert rows[2] == "    ID Bob"
+
+
+# --- the table ----------------------------------------------------------------------
+
+
+def test_entries_are_sorted_by_table_and_separated_by_a_blank_line() -> None:
+    """P-6, §3: one blank line between tables; C-4: no column headings."""
     rnd = (
         pairing(7, seat(1, "corp"), seat(2, "runner")),
         pairing(2, seat(3, None, 3), seat(None)),
@@ -244,12 +323,11 @@ def test_entries_are_sorted_by_table_and_header_has_no_top_cut_note() -> None:
     doc = format_pairings(t, _view(t))
 
     assert [plain(e.text).split(" ")[0] for e in doc.entries] == ["T2", "T7"]
+    assert all(e.gap for e in doc.entries)
+    assert doc.columns == ()
     assert doc.header == (
         "**Round 1 pairings — in progress**",
         f"Data from {FETCHED_AT_TAG}",
-    )
-    assert doc.footer == (
-        "Round 1 · 2 tables · Corp left, Runner right · score from Corp side"
     )
 
 
@@ -269,9 +347,11 @@ def test_three_digit_tables_widen_the_table_column() -> None:
     t = tournament(rnd, players=tuple(player(i) for i in range(1, 201)))
     doc = format_pairings(t, _view(t))
 
-    assert plain(doc.columns[0]).startswith("T    Corp ")
-    assert plain(doc.entries[0].text).startswith("T1   Player1 ")
-    assert plain(doc.entries[-1].text).startswith("T100 Player199 ")
+    assert plain(doc.entries[0].text).split("\n") == [
+        "T1    – Player1 · —",
+        "      – Player2 · —",
+    ]
+    assert plain(doc.entries[-1].text).startswith("T100  – Player199 ")
 
 
 @pytest.mark.parametrize(

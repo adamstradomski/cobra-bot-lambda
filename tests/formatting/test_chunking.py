@@ -91,9 +91,9 @@ def test_ac14_large_standings_fit_and_keep_rank_order(raw_fixture: LoadRaw) -> N
     assert len(messages) > 1
     blocks = _blocks(messages)
     assert all(block[0] != "" for block in blocks)  # no gap atop a block
-    rows = [line for block in blocks for line in block if line][2:]  # no columns
-    assert rows == [e.text for e in doc.entries]  # all, once, in order
-    ranks = [int(plain(row).split()[0]) for row in rows]
+    lines = [line for block in blocks for line in block if line][2:]  # no columns
+    assert lines == [line for e in doc.entries for line in e.text.splitlines()]
+    ranks = [int(plain(row).split()[0]) for row in lines[::2]]  # 2 lines per player
     assert ranks == list(range(1, 236))
 
 
@@ -111,10 +111,11 @@ def test_ac15_thousand_players_are_cut_with_a_link() -> None:
     last = _parts(messages)[-1][-1].split("\n")[-1]
     match = OMITTED.fullmatch(last)
     assert match is not None
-    rows = [line for block in _blocks(messages) for line in block][2:]
-    assert int(match.group(1)) == 1000 - len(rows)
+    lines = [line for block in _blocks(messages) for line in block][2:]
+    kept = len(lines) // 2  # 2 lines per player, no gaps: all on 0 points
+    assert int(match.group(1)) == 1000 - kept
     assert match.group(2) == URL
-    assert rows == [e.text for e in doc.entries[: len(rows)]]
+    assert lines == [line for e in doc.entries[:kept] for line in e.text.splitlines()]
 
 
 # --- layout -------------------------------------------------------------------------

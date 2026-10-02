@@ -92,7 +92,7 @@ def test_ac21_every_payload_blocks_mentions_and_names_stay_in_code_blocks() -> N
     text = "\n".join(parts)
     assert "*bold_name~" in text  # literal inside the code block, not escaped
     assert "@Mention" in text  # pings are blocked by allowed_mentions
-    assert "'''@everyone" in text  # backticks replaced (C-8)
+    assert "'''@everyone" in text  # backticks replaced (C-7)
 
 
 # --- routing --------------------------------------------------------------------------

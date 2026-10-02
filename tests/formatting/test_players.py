@@ -21,7 +21,7 @@ TOP_CUT = (
     ),
 )
 
-ALICE_ROW = " 1  Alice             6  0.000  Nuvem     Arissana"
+ALICE_ROWS = [" 1 Alice             6  0.000", "   Nuvem · Arissana"]
 
 
 def _t(*rounds: Round) -> Tournament:
@@ -36,17 +36,17 @@ def test_player_with_opponent() -> None:
     card = plain(player_card(_t(ROUND_1, ROUND_2), ALICE))
 
     assert card.split("\n") == [
-        ALICE_ROW,
+        *ALICE_ROWS,
         "Round 2",
-        "T1  Bob               vs  Alice",
-        "    HB                    Arissana",
+        "T1   – Bob · HB",
+        "     – Alice · Arissana",
     ]
 
 
 def test_player_with_bye() -> None:
     card = plain(player_card(_t(ROUND_1), CAROL))
 
-    assert card.split("\n")[1:] == ["Round 1", "T2  Carol            BYE"]
+    assert card.split("\n")[2:] == ["Round 1", "T2  BYE Carol"]
 
 
 def test_player_during_top_cut_shows_latest_swiss_round_and_note() -> None:
@@ -59,17 +59,17 @@ def test_player_during_top_cut_shows_latest_swiss_round_and_note() -> None:
         f"Data from {FETCHED_AT_TAG}",
     )
     lines = plain(doc.entries[0].text).split("\n")
-    assert lines[1:3] == ["Round 1", "T1  Alice            3–0  Bob"]
+    assert lines[2:4] == ["Round 1", "T1   3 Alice · Nuvem"]
 
 
 def test_player_not_paired_in_latest_round() -> None:
     card = plain(player_card(_t(ROUND_1, ROUND_2), CAROL))
 
-    assert card.split("\n")[1:] == ["Round 2: not paired"]
+    assert card.split("\n")[2:] == ["Round 2: not paired"]
 
 
 def test_tournament_without_rounds_shows_standings_row_only() -> None:
-    assert plain(player_card(_t(), ALICE)) == ALICE_ROW
+    assert plain(player_card(_t(), ALICE)).split("\n") == ALICE_ROWS
 
 
 def test_cards_are_separated_and_more_matches_note_comes_after() -> None:
@@ -79,7 +79,9 @@ def test_cards_are_separated_and_more_matches_note_comes_after() -> None:
     assert all(e.gap for e in doc.entries)
     assert doc.notes == ("…and 4 more matched",)
     assert doc.header == ("**Players matching “a”**", f"Data from {FETCHED_AT_TAG}")
-    assert doc.footer == "Pts / SoS / Corp / Runner · pairing: Corp left, Runner right"
+    assert doc.footer == (
+        "Corp · Runner on 2nd line · pairing: Corp first · number = points scored"
+    )
 
 
 def test_no_match() -> None:

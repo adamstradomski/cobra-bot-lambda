@@ -20,6 +20,7 @@ CORP_SHORT_NAMES: dict[str, str] = {
     "Issuaq Adaptics": "Issuaq",
     "Earth Station": "Earth St.",
     "Synapse Global": "Synapse",
+    "GameNET": "GameNET",
     # Seen in the test fixtures
     "Epiphany Analytica": "Epiphany",
     "Hyoubu Institute": "Hyoubu",

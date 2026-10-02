@@ -78,7 +78,7 @@ def test_pairings() -> None:
     reply = _messages(execute(Command("pairings", "4909", round=1), cache))
 
     assert reply[0][0].title == "Single-Sided Top 8 Fixture"
-    assert re.search(r"^T21 +Player0023 +BYE$", _text(reply), re.MULTILINE)
+    assert re.search(r"^T21 BYE Player0023$", _text(reply), re.MULTILINE)
 
 
 def test_standings() -> None:
@@ -94,7 +94,7 @@ def test_player() -> None:
 
     reply = _messages(execute(Command("player", "4909", query="layer0017"), cache))
 
-    assert re.search(r"^ 2  Player0017 +18  ", _text(reply), re.MULTILINE)
+    assert re.search(r"^ 2 Player0017 +18  ", _text(reply), re.MULTILINE)
 
 
 def test_shortcode_reference() -> None:

@@ -79,7 +79,9 @@ def omitted_entries(count: int, url: str) -> str:
 
 BYE = "BYE"
 INTENTIONAL_DRAW = "ID"
-VERSUS = "vs"
+NO_RESULT = "–"  # points not reported yet
+CORP_TAG = "C"  # the side of a double-sided game
+RUNNER_TAG = "R"
 UNKNOWN_IDENTITY = "—"
 UNKNOWN_PLAYER = "Unknown player"
 
@@ -90,8 +92,6 @@ POINTS = "Pts"
 SOS = "SoS"
 CORP = "Corp"
 RUNNER = "Runner"
-TABLE = "T"
-SCORE = "Score"
 
 
 def _count(count: int, noun: str) -> str:
@@ -103,19 +103,21 @@ def _count(count: int, noun: str) -> str:
 
 def standings_footer(after_round: int | None, players: int) -> str:
     parts = [f"Round {after_round}"] if after_round else []
-    parts += [_count(players, "player"), f"{POINTS} / {SOS} / {CORP} / {RUNNER}"]
+    parts += [_count(players, "player"), f"{CORP} · {RUNNER} on 2nd line"]
     return " · ".join(parts)
 
 
-def pairings_footer(round_number: int, tables: int) -> str:
-    return (
-        f"Round {round_number} · {_count(tables, 'table')} · "
-        f"{CORP} left, {RUNNER} right · score from {CORP} side"
+def pairings_footer(round_number: int, tables: int, double_sided: bool) -> str:
+    legend = (
+        "double-sided · columns = game 1 | game 2"
+        if double_sided
+        else f"{CORP} first · number = points scored"
     )
+    return f"Round {round_number} · {_count(tables, 'table')} · {legend}"
 
 
 PLAYERS_FOOTER = (
-    f"{POINTS} / {SOS} / {CORP} / {RUNNER} · pairing: {CORP} left, {RUNNER} right"
+    f"{CORP} · {RUNNER} on 2nd line · pairing: {CORP} first · number = points scored"
 )
 
 

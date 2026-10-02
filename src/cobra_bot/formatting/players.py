@@ -1,6 +1,6 @@
 """Player cards for `/cobra player` (FR-09, FR-10; SPEC §9).
 
-Each card, in the ```ansi code block: the player's standings row, then their
+Each card, in the ```ansi code block: the player's standings entry, then their
 pairing in the latest Swiss round (or bye). A blank line separates the cards. A
 note is added while a top cut is in progress.
 """
@@ -10,7 +10,7 @@ from cobra_bot.domain.models import Player, Tournament
 from cobra_bot.domain.rounds import swiss_round_numbers, top_cut_in_progress
 from cobra_bot.domain.search import SearchResult
 from cobra_bot.formatting import ansi
-from cobra_bot.formatting.ansi import RESET, sgr
+from cobra_bot.formatting.ansi import RESET
 from cobra_bot.formatting.document import (
     Document,
     Entry,
@@ -61,4 +61,4 @@ def player_card(t: Tournament, player: Player) -> str:
 
 
 def _muted(text: str) -> str:
-    return f"{sgr(ansi.MUTED)}{text}{RESET}"
+    return f"{ansi.SECONDARY}{text}{RESET}"

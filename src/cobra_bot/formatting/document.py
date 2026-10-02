@@ -8,7 +8,8 @@ from dataclasses import dataclass
 
 from cobra_bot import messages
 from cobra_bot.domain.models import Tournament
-from cobra_bot.formatting.text import code_text, discord_timestamp
+from cobra_bot.formatting import ansi
+from cobra_bot.formatting.text import NAME_WIDTH, code_text, discord_timestamp, fit
 
 EMBED_COLOR = 0xE0B23A
 
@@ -55,6 +56,15 @@ def subtext(text: str) -> str:
 
 
 def player_name(t: Tournament, player_id: int | None) -> str:
-    """Display name for a player ID, safe inside a code block."""
+    """Display name for a player ID, safe inside a code block, cut to 15 columns
+    (C-7)."""
     player = t.player(player_id) if player_id is not None else None
-    return code_text(player.name) if player else messages.UNKNOWN_PLAYER
+    return (
+        fit(code_text(player.name), NAME_WIDTH) if player else messages.UNKNOWN_PLAYER
+    )
+
+
+def identity(label: str, side_style: str) -> str:
+    """A short ID in its side's colour; an unknown ID in the secondary colour (A-4)."""
+    style = ansi.SECONDARY if label == messages.UNKNOWN_IDENTITY else side_style
+    return f"{style}{label}"
