@@ -155,6 +155,18 @@ One-time setup:
 
    Do not name this stack `cobra-bot-…`: the execution role may modify anything with that prefix.
 
+   **Updating the roles later.** On an existing stack, `aws cloudformation deploy` keeps the stored value of every parameter you don't pass, even when the template's default has changed; if nothing else changed it reports `No changes to deploy`. Pass any parameter whose new value you want explicitly, for example after changing the `GitHubRepository` default:
+
+   ```bash
+   aws cloudformation deploy --region eu-central-1 --stack-name github-deploy-cobra-bot --template-file bootstrap/github-deploy.yaml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides GitHubRepository=adamstradomski@83371226/cobra-bot-lambda@1400117730
+   ```
+
+   Check the subject the role now trusts:
+
+   ```bash
+   aws iam get-role --role-name github-deploy-cobra-bot --query "Role.AssumeRolePolicyDocument.Statement[0].Condition"
+   ```
+
 2. **Create the GitHub environment.** Repository **Settings → Environments → New environment** `production`. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`. Leave **Required reviewers** off for fully automatic deploys.
 
 3. **Add the environment's values** (same page):
