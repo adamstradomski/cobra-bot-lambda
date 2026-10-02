@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Lets GitHub Actions deploy the cobra-bot stack from main, without stored AWS keys.
+  GitHub signs in through OIDC as GitHubDeployRole, which can only upload the build
+  and run change sets on the app stack. CloudFormation applies them as
+  CloudFormationExecutionRole, limited to resources named after the app stack.
+  Deploy once by hand; see README.md, "Automatic deployment from main".
+  Long-form intrinsics keep this file readable by plain YAML parsers, which the
+  template tests rely on.
+
+Parameters:
+  GitHubRepository:
+    Type: String
+    Default: adamstradomski/cobra-bot-lambda
+    Description: owner/name of the repository allowed to deploy.
+  GitHubEnvironment:
+    Type: String
+    Default: production
+    Description: >-
+      GitHub environment the deploy job runs in. Only jobs in this environment can
+      assume the deploy role; restrict the environment to the main branch.
+  AppStackName:
+    Type: String
+    Default: cobra-bot
+    Description: >-
+      Stack the workflow deploys. The execution role only touches resources whose
+      names start with this name followed by a hyphen.
+  SamArtifactBucket:
+    Type: String
+    Description: >-
+      SAM's artifact bucket (the SamCliSourceBucket output of the
+      aws-sam-cli-managed-default stack, created by the first `sam deploy`).
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: >-
+      false if the account already has the token.actions.githubusercontent.com
+      provider (there can be only one per account).
+
+Conditions:
+  ShouldCreateOidcProvider:
+    Fn::Equals:
+      - Ref: CreateOidcProvider
+      - "true"
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: "github-deploy-${AppStackName}"
+      Description: Assumed by the GitHub Actions deploy job through OIDC.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  Fn::Sub: "repo:${GitHubRepository}:environment:${GitHubEnvironment}"
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ChangeSetsOnAppStack
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ListChangeSets
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:ListStackResources
+                  - cloudformation:GetTemplate
+                  - cloudformation:GetTemplateSummary
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppStackName}/*"
+              - Sid: SamTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
+              - Sid: FindSamArtifactBucket
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*"
+              - Sid: ReadTemplates
+                Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"
+              - Sid: UploadBuild
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:s3:::${SamArtifactBucket}/${AppStackName}/*"
+              - Sid: ListArtifactBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:s3:::${SamArtifactBucket}"
+              - Sid: HandOverToCloudFormation
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  Fn::GetAtt: CloudFormationExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: "cfn-exec-${AppStackName}"
+      Description: CloudFormation applies the app stack's change sets as this role.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+      Policies:
+        - PolicyName: app-stack-resources
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Functions
+                Effect: Allow
+                Action: lambda:*
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppStackName}-*"
+                  - Fn::Sub: "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppStackName}-*:*"
+              - Sid: ReadFunctionCode
+                Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:s3:::${SamArtifactBucket}/${AppStackName}/*"
+              - Sid: FunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateRoleDescription
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:ListRoleTags
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+              - Sid: OnlyBasicExecutionManagedPolicy
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN:
+                      Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              - Sid: PassFunctionRolesToLambda
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: CacheBucket
+                Effect: Allow
+                Action: s3:*
+                # Bucket-level only (no /*): CloudFormation never needs the cached objects.
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:s3:::${AppStackName}-*"
+              - Sid: LogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${AppStackName}-*"
+                  - Fn::Sub: "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${AppStackName}-*:*"
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: "*"
+              - Sid: Budget
+                Effect: Allow
+                Action:
+                  - budgets:ViewBudget
+                  - budgets:ModifyBudget
+                  - budgets:TagResource
+                  - budgets:UntagResource
+                  - budgets:ListTagsForResource
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${AppStackName}-*"
+
+Outputs:
+  GitHubDeployRoleArn:
+    Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN.
+    Value:
+      Fn::GetAtt: GitHubDeployRole.Arn
+  CloudFormationExecutionRoleArn:
+    Description: GitHub environment variable AWS_CFN_EXECUTION_ROLE_ARN.
+    Value:
+      Fn::GetAtt: CloudFormationExecutionRole.Arn

@@ -1,0 +1,75 @@
+name: Deploy
+
+# Deploys the cobra-bot stack after CI passes on a push to main. workflow_run always
+# uses this file as it is on the default branch (main). Setup: README.md,
+# "Automatic deployment from main".
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One deploy at a time, never cancelled halfway; a newer queued run replaces an older
+# queued one.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  STACK_NAME: cobra-bot
+  SAM_CLI_TELEMETRY: "0"
+
+jobs:
+  deploy:
+    name: Deploy to AWS
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # OIDC token for configure-aws-credentials
+    steps:
+      # Deploy exactly the commit CI tested.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      # sam build needs python3.14 on PATH to install the Lambda dependencies.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: github-deploy-${{ github.run_id }}
+          aws-region: eu-central-1
+
+      - name: Build Lambda package
+        run: uvx --from aws-sam-cli==1.166.2 sam build
+
+      # Values go through env, not inline ${{ }}, so they are never parsed as shell.
+      - name: Deploy stack
+        run: >-
+          uvx --from aws-sam-cli==1.166.2 sam deploy
+          --stack-name "$STACK_NAME"
+          --s3-prefix "$STACK_NAME"
+          --role-arn "$CFN_EXECUTION_ROLE_ARN"
+          --parameter-overrides
+          "DiscordPublicKey=$DISCORD_PUBLIC_KEY"
+          "BudgetEmail=$BUDGET_EMAIL"
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
+        env:
+          CFN_EXECUTION_ROLE_ARN: ${{ vars.AWS_CFN_EXECUTION_ROLE_ARN }}
+          DISCORD_PUBLIC_KEY: ${{ vars.DISCORD_PUBLIC_KEY }}
+          BUDGET_EMAIL: ${{ secrets.BUDGET_EMAIL }}
