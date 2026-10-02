@@ -1,4 +1,4 @@
-# Embed Format Requirements — Standings & Pairings (v2, compact)
+# Embed Format Requirements — Standings & Pairings (v3, compact)
 
 This document defines how the bot renders Cobra tournament data as Discord embeds.
 
@@ -17,11 +17,13 @@ Priorities: **MUST** / **SHOULD** / **COULD**. Unconfirmed decisions are marked 
 
 **Changes from v1:** the bot cannot tell whether a viewer is on desktop or mobile, so v2 uses **one compact format for both** (this replaces v1's 52-column table and its open question about a mobile layout):
 
-- Every table line is at most **34 display columns**, so it fits a phone screen.
+- Every table line is at most **34 display columns** (standings: 22 since v3), so it fits a phone screen.
 - The table stays readable when the mobile client drops ANSI colors.
 - Colors are a desktop-only enhancement.
 - Standings show IDs on a second line; pairings show the points each player scored instead of a score from the Corp's side, and have no column header.
 - Double-sided pairings show the two games as columns instead of `↳` lines.
+
+**Changes from v2:** standings narrow to **22 columns** with **3 lines per player** and no header row: rank, name and points; Corp ID and SoS; Runner ID. Pairings keep the 34-column limit.
 
 ---
 
@@ -32,13 +34,13 @@ Priorities: **MUST** / **SHOULD** / **COULD**. Unconfirmed decisions are marked 
 | C-1 | MUST | One message = one embed. Title = tournament name exactly as in Cobra. `url` = the tournament's Cobra page. |
 | C-2 | MUST | Embed `color` = `0xE0B23A` (14725690). Defined as a single constant. |
 | C-3 | MUST | Description starts with a bold status line (e.g. `**Standings after round 8**`) and ends its header with `Data from <t:{unix}:R>`, where `{unix}` = time the data was fetched from Cobra (not the message send time). Discord renders it in the viewer's locale (e.g. "3 minuty temu"). |
-| C-4 | MUST | The table is one ` ```ansi ` code block. No column-header row in pairings. Standings have a header (§2). |
-| C-5 | MUST | **Width:** every table line is ≤ 34 display columns (measured without ANSI codes, with `wcwidth` or an equivalent; CJK and emoji count as 2). A unit test enforces this on every fixture. Columns are aligned by display width, not by `len()`: letters with diacritics (é, ā, Ō) are width 1, combining marks width 0. |
+| C-4 | MUST | The table is one ` ```ansi ` code block. No column-header row. |
+| C-5 | MUST | **Width:** every table line is ≤ 22 display columns in standings and ≤ 34 in pairings (measured without ANSI codes, with `wcwidth` or an equivalent; CJK and emoji count as 2). A unit test enforces this on every fixture. Columns are aligned by display width, not by `len()`: letters with diacritics (é, ā, Ō) are width 1, combining marks width 0. |
 | C-6 | MUST | **Readable without color:** no information may depend on color alone. On mobile, ANSI codes are stripped and everything renders in one color. Winners are recognizable from the points shown next to the name; sides are recognizable from position or the `C`/`R` tag. |
 | C-7 | MUST | Player names longer than 15 columns are truncated to 14 columns plus `…` (the longest real sample, `nervousnightjar`, is exactly 15). Backticks in names are replaced with `'` so they cannot close the code block. |
 | C-8 | MUST | Send with `allowed_mentions: {"parse": []}`. Names such as `@Bookkeeper` must never ping anyone. Never send `username` (webhook-only). |
 | C-9 | MUST | Discord limits: description ≤ 4096, field value ≤ 1024, ≤ 25 fields, all text in an embed ≤ 6000. A unit test checks every fixture against these limits. |
-| C-10 | MUST | **Chunking:** whole units (a standings player = 2 lines, a pairings table = 2 or 4 lines) go into the description until the next unit would exceed the limit. The remaining units go into fields named `​` (zero-width space), each its own ` ```ansi ` block. The standings header appears only in the first block. A unit is never split, and a block never starts with an empty line. |
+| C-10 | MUST | **Chunking:** whole units (a standings player = 3 lines, a pairings table = 2 or 4 lines) go into the description until the next unit would exceed the limit. The remaining units go into fields named `​` (zero-width space), each its own ` ```ansi ` block. A unit is never split, and a block never starts with an empty line. |
 | C-11 | MUST | If one embed exceeds 6000 characters (about 60+ players in standings), split the output across further messages. **TBD:** a follow-up message vs. pagination with buttons vs. a command option. *Current behaviour (SPEC §9):* follow-up messages, at most 5; if that is not enough, the longest prefix of units is kept and the last line reads "…and N more — [full list on Cobra](url)". |
 | C-12 | MUST | Empty states (tournament not found, no rounds yet, no pairings): a short embed with a single sentence and no code block. Wording: **TBD** (current wording in `messages.py`). |
 | C-13 | SHOULD | Rendering is a pure function `(tournament data, fetched_at) -> embed dict`, covered by golden-file tests against the fixtures. |
@@ -52,7 +54,7 @@ Measured on Discord desktop, dark theme (2026-10), from a screenshot of the live
 |------|-------|-----------|----------|
 | Primary text (rank, table no., neutral player) | `[0m` | ≈`#DBDEE1` (**TBD**: measure) | ≈10.6:1 |
 | Player in standings, round/game winner | `[0m` + `[1m` (bold, default color) | ≈`#DBDEE1` bold | ≈10.6:1 |
-| Secondary (header, rule, SoS, loser, `·`, unknown ID `—`) | `[0;37m` | `#B6B7BC` | 7.2:1 |
+| Secondary (SoS, loser, `·`, unknown ID `—`) | `[0;37m` | `#B6B7BC` | 7.2:1 |
 | Points / score | `[1;33m` | `#B36C00` | 3.5:1 |
 | Corp ID, `C` tag | `[0;34m` | `#1B73D5` | 3.0:1 |
 | Runner ID, `R` tag | `[0;35m` | `#D53FAE` | 3.5:1 |
@@ -79,25 +81,26 @@ Discord's 8 ANSI colors cannot be customized and differ between themes (light, d
 ## 2. Standings
 
 ```
- # Player          Pts  SoS
-─────────────────────────────
- 1 davz131          22  1.821
-   Nuvem · Arissana
+ 1. davz131         22
+    Nuvem        1.821
+    Arissana
 
- 2 Matuszczak       18  2.000
-   Méliès · Sebastião
- 3 Kris_Casual      18  1.734
-   Nebula · Arissana
+ 2. Matuszczak      18
+    Méliès       2.000
+    Sebastião
+ 3. Kris_Casual     18
+    Nebula       1.734
+    Arissana
 ```
 
 | ID | Priority | Requirement |
 |----|----------|-------------|
-| S-1 | MUST | Line 1: rank right-aligned in 2 + space · player padded to 16 · points right-aligned in 3 · 2 spaces · SoS (3 decimal places). Line 2: 3 spaces · `Corp · Runner` (short IDs). |
-| S-2 | MUST | Header ` # Player          Pts  SoS` plus a `─` rule (header width + 2, i.e. as wide as a row: 29), both secondary. Colors: rank primary, player bold, points yellow, SoS secondary, Corp blue, `·` secondary, Runner pink. |
-| S-3 | MUST | Rank 100+: the rank column widens to 3 for the whole table (header, rule and the indent of line 2 shift with it). |
+| S-1 | MUST | Three lines per player. Line 1: rank right-aligned in 2 + `. ` · player padded to 15 · points right-aligned in 3 (4 + 15 + 3 = 22 columns). Line 2: 4 spaces · short Corp ID · SoS (3 decimal places) right-aligned to end under the points. Line 3: 4 spaces · short Runner ID. |
+| S-2 | MUST | No header row. Colors: rank primary, player bold, points yellow, Corp blue, SoS secondary, Runner pink. |
+| S-3 | MUST | Rank 100+: the rank column widens to 3 for the whole table (the indent of lines 2 and 3 shifts with it). The name column gives up that column (names longer than 14 columns are cut to 13 + `…`), so lines stay within 22 (C-5). |
 | S-4 | MUST | Order and rank exactly as returned by Cobra. No tiebreakers are computed. |
 | S-5 | MUST | One empty line between groups with different point totals. No empty line inside a group. |
-| S-6 | MUST | Footer: `Round {n} · {count} players · Corp · Runner on 2nd line` (no round part before the first round is complete). |
+| S-6 | MUST | Footer: `Round {n} · {count} players · Corp + SoS on line 2, Runner on line 3` (no round part before the first round is complete). |
 | S-7 | SHOULD | Dropped players: **TBD** whether to hide them, append them at the end, or mark them. |
 | S-8 | COULD | Extended SoS (eSoS) column. **TBD.** |
 
@@ -152,20 +155,20 @@ T1   3 Kris_Casual
 
 Not covered by the design fixtures; derived from §2 and §3 so the same rules (C-5 width, C-6, palette) hold.
 
-- A card is the player's standings unit (§2, without the header), a secondary `Round {n}` line and the player's table in the latest Swiss round in the §3 form (including a bye), or `Round {n}: not paired`. Cards are separated by an empty line.
-- Footer: `Corp · Runner on 2nd line · pairing: Corp first · number = points scored`.
+- A card is the player's standings unit (§2), a secondary `Round {n}` line and the player's table in the latest Swiss round in the §3 form (including a bye), or `Round {n}: not paired`. Cards are separated by an empty line.
+- Footer: `Corp + SoS on line 2, Runner on line 3 · pairing: Corp first · number = points scored`.
 
 ## 5. Acceptance criteria (tests)
 
 1. Rendering the sample data reproduces each fixture exactly (ignoring `url` and the `<t:…>` value). *In the repository:* golden files for the anonymised `single_sided_top8` and `dss` fixtures (`tests/formatting/test_golden.py`).
-2. No table line in any fixture exceeds 34 display columns once ANSI codes are removed.
+2. Once ANSI codes are removed, no standings line in any fixture exceeds 22 display columns and no pairings line exceeds 34.
 3. All fixtures satisfy the C-9 limits. 60 generated players trigger the split described in C-11.
 4. With ANSI codes removed, every winner is identifiable from the points alone, and every DSS deck from the `C`/`R` tag alone.
 5. SSS: `Inermis (Runner) 0–3 Minstrel (Corp)` renders Minstrel on line 1 with `3` (bold) and Inermis on line 2 with `0` (secondary).
 6. DSS: Kris_Casual (C GameNET) 0–3 Matuszczak (R —), then Matuszczak (C —) 0–3 Kris_Casual (R 0mission), renders exactly the 4 lines from §3.2.
 7. DSS with no results: all points are `–`, and both players are primary and not bold.
 8. Output contains no `[30m`, no `↳`, and no `-` in scores. Every line ends with `[0m`.
-9. A name `` a`b `` renders `a'b`. A 20-character name is truncated to 14 characters plus `…`. A name with an emoji does not break the 34-column limit.
+9. A name `` a`b `` renders `a'b`. A 20-character name is truncated to 14 characters plus `…`. A name with an emoji does not break the width limit.
 10. An unmapped ID uses the A-2 fallback and logs a warning.
 11. The standings table has an empty line exactly at each change in point total. No chunk starts with an empty line.
 

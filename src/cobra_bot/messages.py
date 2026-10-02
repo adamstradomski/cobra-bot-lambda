@@ -85,13 +85,10 @@ RUNNER_TAG = "R"
 UNKNOWN_IDENTITY = "—"
 UNKNOWN_PLAYER = "Unknown player"
 
-# Table column headings.
-RANK = "#"
-PLAYER = "Player"
-POINTS = "Pts"
-SOS = "SoS"
+# Legend words.
 CORP = "Corp"
 RUNNER = "Runner"
+STANDINGS_LEGEND = f"{CORP} + SoS on line 2, {RUNNER} on line 3"
 
 
 def _count(count: int, noun: str) -> str:
@@ -103,7 +100,7 @@ def _count(count: int, noun: str) -> str:
 
 def standings_footer(after_round: int | None, players: int) -> str:
     parts = [f"Round {after_round}"] if after_round else []
-    parts += [_count(players, "player"), f"{CORP} · {RUNNER} on 2nd line"]
+    parts += [_count(players, "player"), STANDINGS_LEGEND]
     return " · ".join(parts)
 
 
@@ -116,9 +113,7 @@ def pairings_footer(round_number: int, tables: int, double_sided: bool) -> str:
     return f"Round {round_number} · {_count(tables, 'table')} · {legend}"
 
 
-PLAYERS_FOOTER = (
-    f"{CORP} · {RUNNER} on 2nd line · pairing: {CORP} first · number = points scored"
-)
+PLAYERS_FOOTER = f"{STANDINGS_LEGEND} · pairing: {CORP} first · number = points scored"
 
 
 def tournament_fallback_name(tournament_id: int) -> str:

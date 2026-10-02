@@ -324,7 +324,6 @@ def test_entries_are_sorted_by_table_and_separated_by_a_blank_line() -> None:
 
     assert [plain(e.text).split(" ")[0] for e in doc.entries] == ["T2", "T7"]
     assert all(e.gap for e in doc.entries)
-    assert doc.columns == ()
     assert doc.header == (
         "**Round 1 pairings — in progress**",
         f"Data from {FETCHED_AT_TAG}",

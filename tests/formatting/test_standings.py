@@ -14,11 +14,8 @@ from builders import (
 from cobra_bot.cobra.parser import parse_tournament
 from cobra_bot.domain.models import Tournament
 from cobra_bot.domain.rounds import StandingsView, standings_view
-from cobra_bot.formatting.standings import (
-    format_standings,
-    standings_columns,
-    standings_row,
-)
+from cobra_bot.formatting.standings import format_standings, standings_row
+from cobra_bot.formatting.text import display_width
 
 type LoadRaw = Callable[[str], object]
 
@@ -37,6 +34,13 @@ def _lines(text: str) -> list[str]:
     return plain(text).split("\n")
 
 
+def _round_one(*players: object) -> Tournament:
+    return tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),),
+        players=players,  # type: ignore[arg-type]
+    )
+
+
 def test_ac01_finished_tournament(raw_fixture: LoadRaw) -> None:
     t = parse_tournament(
         raw_fixture("single_sided_top8"), tournament_id=4909, fetched_at=FETCHED_AT
@@ -45,14 +49,17 @@ def test_ac01_finished_tournament(raw_fixture: LoadRaw) -> None:
 
     assert doc.header == ("**Standings after round 8**", f"Data from {FETCHED_AT_TAG}")
     assert _lines(doc.entries[0].text) == [
-        " 1 Player0042       22  1.821",
-        "   Nuvem · Arissana",
+        " 1. Player0042      22",
+        "    Nuvem        1.821",
+        "    Arissana",
     ]
     assert len(doc.entries) == 46
     assert doc.url == (
         "https://tournaments.nullsignal.games/tournaments/4909/players/standings"
     )
-    assert doc.footer == "Round 8 · 46 players · Corp · Runner on 2nd line"
+    assert doc.footer == (
+        "Round 8 · 46 players · Corp + SoS on line 2, Runner on line 3"
+    )
 
 
 def test_ac08_no_completed_round_lists_players_in_rank_order() -> None:
@@ -62,12 +69,21 @@ def test_ac08_no_completed_round_lists_players_in_rank_order() -> None:
 
     assert doc.header[0] == "**No completed rounds yet**"
     assert [plain(e.text).split()[1] for e in doc.entries] == ["Alice", "Bob"]
-    assert doc.footer == "2 players · Corp · Runner on 2nd line"
+    assert doc.footer == "2 players · Corp + SoS on line 2, Runner on line 3"
+
+
+def test_no_column_headings() -> None:
+    """S-2: the table starts with the first player."""
+    t = _round_one(player(1, rank=1), player(2, rank=2))
+
+    doc = format_standings(t, _view(t))
+
+    assert plain(doc.entries[0].text).startswith(" 1. ")
 
 
 def test_row_layout_and_colours() -> None:
-    """S-1, S-2: rank, bold name, yellow points, grey SoS; then blue Corp, grey
-    `·`, pink Runner. Every line ends with a reset (A-0)."""
+    """S-1, S-2: rank, bold name, yellow points; blue Corp, grey SoS; pink Runner.
+    Every line ends with a reset (A-0)."""
     p = player(
         1,
         "Alice",
@@ -78,31 +94,41 @@ def test_row_layout_and_colours() -> None:
         runner="Arissana Rocha Nahu: Street Artist",
     )
 
-    assert standings_row(p) == (
-        f"{PRIMARY} 1 {STRONG}Alice           {SCORE} 22  {SECONDARY}1.821{PRIMARY}\n"
-        f"   {CORP}Nuvem{SECONDARY} · {RUNNER}Arissana{PRIMARY}"
-    )
+    assert standings_row(p).split("\n") == [
+        f"{PRIMARY} 1. {STRONG}Alice          {SCORE} 22{PRIMARY}",
+        f"    {CORP}Nuvem        {SECONDARY}1.821{PRIMARY}",
+        f"    {RUNNER}Arissana{PRIMARY}",
+    ]
 
 
-def test_header_and_rule_are_secondary() -> None:
-    """S-2: the rule is 2 columns wider than the header, as wide as a row."""
-    header, rule = standings_columns()
+def test_longest_lines_are_22_columns() -> None:
+    """C-5: a 15-column name with 2-digit points; a 9-column Corp ID with SoS."""
+    p = player(1, "A" * 15, rank=99, points=22, sos="1.5", corp="Earth Station: X")
 
-    assert header == f"{SECONDARY} # Player          Pts  SoS{PRIMARY}"
-    assert rule == f"{SECONDARY}{'─' * 29}{PRIMARY}"
+    assert [display_width(line) for line in _lines(standings_row(p))] == [22, 22, 5]
+
+
+def test_sos_ends_under_the_points() -> None:
+    """S-1: the SoS is right-aligned to the end of the points."""
+    first, second, _ = _lines(standings_row(player(1, points=9, sos="2.25")))
+
+    assert len(first) == len(second) == 22
 
 
 def test_sos_is_shown_with_three_decimals() -> None:
-    assert _lines(standings_row(player(1, sos="3.75")))[0].endswith("  3.750")
-    assert _lines(standings_row(player(1, sos="0")))[0].endswith("  0.000")
+    assert _lines(standings_row(player(1, sos="3.75")))[1].endswith(" 3.750")
+    assert _lines(standings_row(player(1, sos="0")))[1].endswith(" 0.000")
 
 
 def test_missing_identities_show_a_secondary_dash() -> None:
     """A-4."""
     row = standings_row(player(1, "Bob", rank=12))
 
-    assert _lines(row)[1] == "   — · —"
-    assert row.split("\n")[1] == f"   {SECONDARY}—{SECONDARY} · {SECONDARY}—{PRIMARY}"
+    assert _lines(row)[1:] == ["    —            0.000", "    —"]
+    assert row.split("\n")[1:] == [
+        f"    {SECONDARY}—            {SECONDARY}0.000{PRIMARY}",
+        f"    {SECONDARY}—{PRIMARY}",
+    ]
 
 
 def test_names_are_literal_in_the_code_block() -> None:
@@ -112,14 +138,14 @@ def test_names_are_literal_in_the_code_block() -> None:
 
 @pytest.mark.parametrize(
     ("length", "shown"),
-    [(14, "A" * 14 + "  "), (15, "A" * 15 + " "), (16, "A" * 14 + "… ")],
+    [(14, "A" * 14 + " "), (15, "A" * 15), (16, "A" * 14 + "…")],
     ids=["below-limit", "at-limit", "one-above"],
 )
 def test_long_names_are_cut_to_15_columns(length: int, shown: str) -> None:
     """C-7: names longer than 15 columns become 14 columns plus `…`."""
     row = _lines(standings_row(player(1, "A" * length, points=22)))[0]
 
-    assert row == f" 1 {shown} 22  0.000"
+    assert row == f" 1. {shown} 22"
 
 
 def test_wide_characters_keep_the_columns_aligned() -> None:
@@ -127,19 +153,16 @@ def test_wide_characters_keep_the_columns_aligned() -> None:
     emoji = chr(0x1F600)
     row = _lines(standings_row(player(1, f"{emoji}Ace", points=22)))[0]
 
-    assert row == f" 1 {emoji}Ace{' ' * 11} 22  0.000"
+    assert row == f" 1. {emoji}Ace{' ' * 10} 22"
 
 
 def test_blank_line_between_point_groups() -> None:
     """S-5."""
-    players = (
+    t = _round_one(
         player(1, rank=1, points=6),
         player(2, rank=2, points=3),
         player(3, rank=3, points=3),
         player(4, rank=4, points=0),
-    )
-    t = tournament(
-        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=players
     )
 
     doc = format_standings(t, _view(t))
@@ -147,22 +170,36 @@ def test_blank_line_between_point_groups() -> None:
     assert [e.gap for e in doc.entries] == [False, True, False, True]
 
 
-def test_three_digit_ranks_widen_the_rank_column() -> None:
-    """S-3: for the whole table, including the header, rule and ID lines."""
-    players = tuple(player(i, rank=i) for i in range(1, 101))
-    t = tournament(
-        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=players
-    )
+def test_two_digit_ranks_keep_the_narrow_column() -> None:
+    """S-3 boundary: rank 99 does not widen the column."""
+    t = _round_one(*(player(i, rank=i) for i in range(1, 100)))
 
     doc = format_standings(t, _view(t))
 
-    assert plain(doc.columns[0]) == "  # Player          Pts  SoS"
-    assert plain(doc.columns[1]) == "─" * 30
+    assert _lines(doc.entries[0].text)[0] == " 1. Player1          0"
+    assert _lines(doc.entries[-1].text)[0] == "99. Player99         0"
+
+
+def test_three_digit_ranks_widen_the_rank_column() -> None:
+    """S-3: for the whole table, the ID lines included; the name column gives up
+    the column, so lines stay within 22 (C-5)."""
+    t = _round_one(*(player(i, rank=i) for i in range(1, 101)))
+
+    doc = format_standings(t, _view(t))
+
     assert _lines(doc.entries[0].text) == [
-        "  1 Player1           0  0.000",
-        "    — · —",
+        "  1. Player1         0",
+        "     —           0.000",
+        "     —",
     ]
-    assert _lines(doc.entries[-1].text)[0].startswith("100 Player100 ")
+    assert _lines(doc.entries[-1].text)[0] == "100. Player100       0"
+
+
+def test_three_digit_ranks_cut_names_at_14_columns() -> None:
+    """S-3, C-5: with a 3-column rank, names longer than 14 columns are cut."""
+    p = player(1, "A" * 15, rank=100, points=22)
+
+    assert _lines(standings_row(p, 3))[0] == f"100. {'A' * 13}… 22"
 
 
 def test_stale_private_notice() -> None:

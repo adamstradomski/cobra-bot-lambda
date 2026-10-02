@@ -94,7 +94,7 @@ def test_player() -> None:
 
     reply = _messages(execute(Command("player", "4909", query="layer0017"), cache))
 
-    assert re.search(r"^ 2 Player0017 +18  ", _text(reply), re.MULTILINE)
+    assert re.search(r"^ 2[.] Player0017 +18$", _text(reply), re.MULTILINE)
 
 
 def test_shortcode_reference() -> None:

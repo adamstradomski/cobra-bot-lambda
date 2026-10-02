@@ -26,7 +26,6 @@ class Document:
     url: str  # title link, and the "full list on Cobra" link when entries are cut
     header: tuple[str, ...]  # markdown lines above the table
     entries: tuple[Entry, ...]  # table rows
-    columns: tuple[str, ...] = ()  # table heading lines, atop the first code block
     notes: tuple[str, ...] = ()  # markdown lines below the table
     footer: str = ""  # plain-text legend
 
