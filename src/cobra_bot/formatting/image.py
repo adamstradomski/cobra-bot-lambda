@@ -37,7 +37,7 @@ from cobra_bot.formatting.text import code_text, fit, short_identity
 # Bump when the drawing changes in a way the cells and style constants in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
 RENDER_VERSION = 1
-MAX_ROWS = 40  # per image
+MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 messages
 MAX_MESSAGES = DISCORD_LIMITS.messages
 NAME_CHARS = 28
 ID_CHARS = 24

@@ -418,26 +418,39 @@ def test_one_page_header_and_omission_together(
 
 def test_large_tournament_fits_the_limits(raw_fixture: LoadRaw, fonts: Fonts) -> None:
     """AC-14: 235 players: at most 5 messages, one image each, under Discord's
-    10 MB attachment limit, players in rank order, none twice."""
+    10 MB attachment limit, every player once, in rank order."""
     t = parse_tournament(
         raw_fixture("large_top_cut"), tournament_id=7, fetched_at=FETCHED_AT
     )
 
     pages = c.standings_images(t, _standings(t), fonts)
 
-    assert len(pages) == 5
+    assert len(pages) <= 5
     assert all(len(p.png) < 10_000_000 for p in pages)
     table = c.standings_table(_standings(t))
     shown = [
         row[0].text
-        for page in c.paginate_groups(table.groups, c.MAX_ROWS, split=True)[:5]
+        for page in c.paginate_groups(table.groups, c.MAX_ROWS, split=True)
         for group in page
         for row in group
     ]
-    assert shown == [str(p.rank) for p in _standings(t).players][: len(shown)]
-    assert pages[-1].embed.description.startswith(
-        f"…and {len(t.players) - len(shown)} more — "
+    assert shown == [str(p.rank) for p in _standings(t).players]
+    assert "more" not in pages[-1].embed.description
+
+
+def test_worlds_sized_pairings_fit_in_five_messages() -> None:
+    """145 single-sided tables (World Championship 2026, round 1) are 290 rows:
+    they must all fit in the 5 messages."""
+    players = tuple(player(n) for n in range(1, 291))
+    rnd = tuple(
+        pairing(n, seat(2 * n - 1, "corp"), seat(2 * n, "runner"))
+        for n in range(1, 146)
     )
+    t = tournament(rnd, players=players)
+
+    table = c.pairings_table(t, _pairings(t))
+
+    assert len(c.paginate_groups(table.groups, c.MAX_ROWS, split=False)) <= 5
 
 
 def test_pairings_legend_has_no_game_key(raw_fixture: LoadRaw, fonts: Fonts) -> None:
