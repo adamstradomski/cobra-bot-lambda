@@ -201,12 +201,12 @@ Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirec
 ## 11. Infrastructure (AWS SAM, `eu-central-1`)
 
 - `InteractionsFunction` + Function URL (auth NONE; protected by signature check).
-- `WorkerFunction`: timeout 30 s, memory 256 MB; `EventInvokeConfig` with `MaximumRetryAttempts: 0` and `MaximumEventAgeInSeconds: 600` (interaction tokens expire after 15 min).
+- `WorkerFunction`: timeout 60 s, memory 1769 MB (one full vCPU, for drawing the reply images; at 256 MB the five images of World Championship 2026, 262 players, took 20–26 s and one call timed out at 30 s); `EventInvokeConfig` with `MaximumRetryAttempts: 0` and `MaximumEventAgeInSeconds: 600` (interaction tokens expire after 15 min).
 - `CacheBucket` (S3, private, lifecycle 1 day).
 - Log groups with 14-day retention.
 - Template parameter `DiscordPublicKey` → `DISCORD_PUBLIC_KEY` on InteractionsFunction. No SSM parameters.
 - `AWS::Budgets::Budget`: USD 5/month, email alert.
-- Implementation (`template.yaml`): `python3.14` on x86_64; WorkerFunction 256 MB; InteractionsFunction 512 MB and timeout 10 s (at 256 MB a cold start took ~2.8 s, too close to Discord's 3 s limit; NFR-04); the bucket blocks public access, enforces bucket-owner object ownership and SSE-S3 encryption, and also aborts incomplete multipart uploads after 1 day; each function logs to its own log group through `LoggingConfig`; the budget alerts by email on actual and forecasted cost above 100 % (it covers the whole account, not just this stack); output `InteractionsEndpointUrl` is the Function URL for the Developer Portal. `samconfig.toml` pins the region.
+- Implementation (`template.yaml`): `python3.14` on x86_64; WorkerFunction 1769 MB; InteractionsFunction 512 MB and timeout 10 s (at 256 MB a cold start took ~2.8 s, too close to Discord's 3 s limit; NFR-04); the bucket blocks public access, enforces bucket-owner object ownership and SSE-S3 encryption, and also aborts incomplete multipart uploads after 1 day; each function logs to its own log group through `LoggingConfig`; the budget alerts by email on actual and forecasted cost above 100 % (it covers the whole account, not just this stack); output `InteractionsEndpointUrl` is the Function URL for the Developer Portal. `samconfig.toml` pins the region.
 
 ## 12. Test fixtures
 
