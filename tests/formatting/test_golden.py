@@ -38,7 +38,7 @@ type LoadRaw = Callable[[str], object]
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden"
 GOLDEN_FIXTURES = {"single_sided_top8": 4909, "dss": 5018}
 FIXTURES = [("single_sided_top8", 4909), ("large_top_cut", 4990), ("dss", 5018)]
-MAX_LINE_WIDTH = 34  # C-5
+MAX_LINE_WIDTH = {"standings": 22, "pairings": 34}  # C-5
 # §1.1: the only SGR codes allowed; `30` renders black on Discord's dark theme.
 ALLOWED_SGR = {"0", "1", "0;37", "1;33", "0;34", "0;35"}
 SGR = re.compile(r"\x1b\[([0-9;]*)m")
@@ -74,20 +74,23 @@ def _payloads(messages: tuple[Message, ...]) -> list[dict[str, object]]:
     return [message_payload(m) for m in messages]
 
 
-def _every_document(t: Tournament) -> list[Document]:
-    """Standings and the pairings of every Swiss round."""
+def _every_document(t: Tournament) -> list[tuple[str, Document]]:
+    """Standings and the pairings of every Swiss round, with their renderer."""
     pairings = []
     for number in swiss_round_numbers(t):
         view = pairings_view(t, number)
         assert isinstance(view, PairingsView)
-        pairings.append(format_pairings(t, view))
-    return [_standings(t), *pairings]
+        pairings.append(("pairings", format_pairings(t, view)))
+    return [("standings", _standings(t)), *pairings]
 
 
-def _table_lines(t: Tournament) -> list[str]:
-    """Every line inside an ```ansi block of every rendered message."""
+def _table_lines(t: Tournament, renderer: str | None = None) -> list[str]:
+    """Every line inside an ```ansi block of every rendered message, optionally of
+    one renderer only."""
     lines = []
-    for doc in _every_document(t):
+    for name, doc in _every_document(t):
+        if renderer not in (None, name):
+            continue
         for message in chunk(doc):
             for embed in message:
                 for part in (embed.description, *embed.fields):
@@ -118,13 +121,16 @@ def test_every_golden_file_has_a_renderer_and_fixture() -> None:
 
 
 @pytest.mark.parametrize(("fixture", "tid"), FIXTURES)
-def test_table_lines_fit_34_columns(
-    raw_fixture: LoadRaw, fixture: str, tid: int
+@pytest.mark.parametrize("renderer", sorted(MAX_LINE_WIDTH))
+def test_table_lines_fit_the_width_limit(
+    raw_fixture: LoadRaw, renderer: str, fixture: str, tid: int
 ) -> None:
-    """C-5, acceptance 2: measured by display width without ANSI codes."""
-    lines = _table_lines(_parse(raw_fixture, fixture, tid))
+    """C-5, acceptance 2: standings 22 columns, pairings 34, measured by display
+    width without ANSI codes."""
+    lines = _table_lines(_parse(raw_fixture, fixture, tid), renderer)
+    limit = MAX_LINE_WIDTH[renderer]
 
-    too_wide = [p for p in map(plain, lines) if display_width(p) > MAX_LINE_WIDTH]
+    too_wide = [p for p in map(plain, lines) if display_width(p) > limit]
     assert too_wide == []
 
 
@@ -170,7 +176,7 @@ def test_every_rendered_fixture_is_within_discord_limits(
     limits = DISCORD_LIMITS
     t = _parse(raw_fixture, fixture, tid)
 
-    for doc in _every_document(t):
+    for _, doc in _every_document(t):
         messages = chunk(doc)
         assert len(messages) <= limits.messages
         for message in messages:

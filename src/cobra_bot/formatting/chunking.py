@@ -114,7 +114,6 @@ class _Packer:
         self._parts: list[str] = []  # rendered parts of the open message
         header = "\n".join(doc.header)
         self._open = _Part(prefix=_clip(header, limits.description))
-        self._columns = list(doc.columns)  # until the first entry is placed
 
     def pack(
         self, entries: tuple[Entry, ...], notes: tuple[str, ...]
@@ -134,19 +133,16 @@ class _Packer:
         body = entry.text.split("\n")
         while True:
             lines = self._open.lines
-            if lines:
-                candidate = [*lines, *([""] if entry.gap else []), *body]
-            else:
-                candidate = [*self._columns, *body]
+            gap = [""] if lines and entry.gap else []
+            candidate = [*lines, *gap, *body]
             if self._fits(_Part(self._open.prefix, candidate)):
                 self._open.lines = candidate
-                self._columns = []
                 return True
             if self._open.empty and not self._parts:
                 # A fresh description cannot hold the entry: clip it (last resort).
-                room = self._room(_Part(lines=[*self._columns, ""]))
+                room = self._room(_Part(lines=[""]))
                 if room <= 0:
-                    raise ValueError("table columns do not fit in the message limits")
+                    raise ValueError("a code block does not fit in the message limits")
                 body = _clip(entry.text, room).split("\n")
                 continue
             if not self._advance():

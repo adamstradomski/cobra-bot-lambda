@@ -27,7 +27,6 @@ def _doc(
     entries: list[str],
     *,
     header: tuple[str, ...] = ("Header",),
-    columns: tuple[str, ...] = (),
     notes: tuple[str, ...] = (),
     footer: str = "",
     gaps: bool = False,
@@ -36,7 +35,6 @@ def _doc(
         title="Title",
         url=URL,
         header=header,
-        columns=columns,
         entries=tuple(Entry(e, gap=gaps) for e in entries),
         notes=notes,
         footer=footer,
@@ -91,9 +89,9 @@ def test_ac14_large_standings_fit_and_keep_rank_order(raw_fixture: LoadRaw) -> N
     assert len(messages) > 1
     blocks = _blocks(messages)
     assert all(block[0] != "" for block in blocks)  # no gap atop a block
-    lines = [line for block in blocks for line in block if line][2:]  # no columns
+    lines = [line for block in blocks for line in block if line]
     assert lines == [line for e in doc.entries for line in e.text.splitlines()]
-    ranks = [int(plain(row).split()[0]) for row in lines[::2]]  # 2 lines per player
+    ranks = [int(plain(row).split(".")[0]) for row in lines[::3]]  # 3 per player
     assert ranks == list(range(1, 236))
 
 
@@ -111,8 +109,8 @@ def test_ac15_thousand_players_are_cut_with_a_link() -> None:
     last = _parts(messages)[-1][-1].split("\n")[-1]
     match = OMITTED.fullmatch(last)
     assert match is not None
-    lines = [line for block in _blocks(messages) for line in block][2:]
-    kept = len(lines) // 2  # 2 lines per player, no gaps: all on 0 points
+    lines = [line for block in _blocks(messages) for line in block]
+    kept = len(lines) // 3  # 3 lines per player, no gaps: all on 0 points
     assert int(match.group(1)) == 1000 - kept
     assert match.group(2) == URL
     assert lines == [line for e in doc.entries[:kept] for line in e.text.splitlines()]
@@ -122,12 +120,12 @@ def test_ac15_thousand_players_are_cut_with_a_link() -> None:
 
 
 def test_small_document_is_one_embed_with_title_link_colour_and_footer() -> None:
-    messages = chunk(_doc(["a", "b"], columns=("col",), footer="legend"))
+    messages = chunk(_doc(["a", "b"], footer="legend"))
 
     assert len(messages) == 1
     (embed,) = messages[0]
     assert (embed.title, embed.url, embed.color) == ("Title", URL, EMBED_COLOR)
-    assert embed.description == "Header\n```ansi\ncol\na\nb\n```"
+    assert embed.description == "Header\n```ansi\na\nb\n```"
     assert embed.fields == ()
     assert embed.footer == "legend"
 
@@ -149,16 +147,6 @@ def test_gaps_are_blank_lines_inside_a_block_only() -> None:
 
     # "h" + block "aaaa", gap, "bbbb" = 24; "cccc" opens a field without a gap.
     assert _blocks(messages) == [["aaaa", "", "bbbb"], ["cccc"]]
-
-
-def test_columns_head_only_the_first_block() -> None:
-    limits = Limits(description=30, chars_per_message=1000)
-
-    messages = chunk(_doc(["aaaa", "bbbb", "cccc"], columns=("col",)), limits)
-
-    blocks = _blocks(messages)
-    assert blocks[0][0] == "col"
-    assert all("col" not in block for block in blocks[1:])
 
 
 def test_entries_are_never_split() -> None:
@@ -261,7 +249,7 @@ def test_notes_that_do_not_fit_get_their_own_field() -> None:
 
 
 def test_no_entries_means_no_code_block() -> None:
-    doc = _doc([], columns=("col",), notes=("No players match.",))
+    doc = _doc([], notes=("No players match.",))
 
     (embed,) = chunk(doc)[0]
 
@@ -329,11 +317,11 @@ def test_long_header_is_clipped_to_the_description() -> None:
     assert _parts(messages) == [["h" * 49 + "…", "```ansi\na\n```"]]
 
 
-def test_columns_wider_than_a_description_are_an_error() -> None:
-    limits = Limits(description=20, chars_per_message=1000)
+def test_description_too_short_for_a_code_block_is_an_error() -> None:
+    limits = Limits(description=11, chars_per_message=1000)
 
-    with pytest.raises(ValueError, match="columns do not fit"):
-        chunk(_doc(["a"], header=(), columns=("c" * 50,)), limits)
+    with pytest.raises(ValueError, match="code block does not fit"):
+        chunk(_doc(["a"], header=()), limits)
 
 
 def test_header_leaving_no_room_for_the_omission_line_is_an_error() -> None:
