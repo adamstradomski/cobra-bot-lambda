@@ -20,6 +20,7 @@ from cobra_bot.domain.rounds import (
 from cobra_bot.formatting import image as c
 from cobra_bot.formatting.document import EMBED_COLOR
 from cobra_bot.formatting.image import Cell, Column, Fonts, Table
+from cobra_bot.formatting.text import corp_label, runner_label
 
 type LoadRaw = Callable[[str], object]
 
@@ -78,7 +79,7 @@ def test_standings_row_values_and_colours() -> None:
     assert (rank.text, name.text, points.text, sos.text) == ("1", "Alice", "3", "1.500")
     assert name.bold and points.bold
     assert (points.color, sos.color) == (c.SCORE, c.SECONDARY)
-    assert (corp.text, corp.color) == ("Nuvem SA", c.CORP)
+    assert (corp.text, corp.color) == ("Nuvem", c.CORP)
     assert (runner.text, runner.color) == (messages.UNKNOWN_IDENTITY, c.SECONDARY)
 
 
@@ -114,19 +115,33 @@ def _id_cell(identity: str, color: str) -> str:
 @pytest.mark.parametrize(
     ("identity", "color", "shown"),
     [
-        ("Nuvem SA: Law of the Land", c.CORP, "Nuvem SA"),  # fits
-        ("Abcdefghijklmn: X", c.CORP, "Abcdefghijklmn"),  # exactly 14: kept
-        ("Weyland Consortium: X", c.CORP, "Weyland"),  # 18: short name
+        ("Nuvem SA: Law of the Land", c.CORP, "Nuvem"),
+        ("Haas-Bioroid: Precision Design", c.CORP, "HB"),
+        ("Weyland Consortium: X", c.CORP, "Weyland"),
         ("Magdalene Keino-Chemutai: X", c.RUNNER, "Magdalene"),
         ("Captain Padma Isbister: X", c.RUNNER, "Padma"),  # an override
-        ("Abcdefghijklmno: X", c.CORP, "Abcdefgh…"),  # 15, unknown: fallback
+        ("Lat: Ethical Freelancer", c.RUNNER, "Lat"),
+        ("Abcdefghijklmno: X", c.CORP, "Abcdefgh…"),  # unknown: the fallback
     ],
 )
-def test_ids_up_to_14_characters_else_the_short_name(
-    identity: str, color: str, shown: str
-) -> None:
+def test_ids_are_always_the_short_name(identity: str, color: str, shown: str) -> None:
+    """The same short names as every other reply (identities.py)."""
     assert _id_cell(identity, color) == shown
-    assert len(_id_cell(identity, color)) <= c.ID_CHARS == 14
+
+
+@pytest.mark.parametrize(
+    ("identity", "color", "label"),
+    [
+        ("Nuvem SA: X", c.CORP, corp_label),
+        ("Haas-Bioroid: X", c.CORP, corp_label),
+        ("Zahya Sadeghi: X", c.RUNNER, runner_label),
+        ('René "Loup" Arcemont: X', c.RUNNER, runner_label),
+    ],
+)
+def test_image_ids_match_the_text_replies(
+    identity: str, color: str, label: object
+) -> None:
+    assert _id_cell(identity, color) == label(identity)  # type: ignore[operator]
 
 
 def test_unknown_identity_is_the_secondary_dash() -> None:
@@ -154,8 +169,8 @@ def test_single_sided_corp_first_winner_bold_loser_secondary() -> None:
         messages.POINTS,
     ]
     assert _texts(table) == [
-        ["T3", "Alice", "Corp", "Nuvem SA", "3"],
-        ["", "Bob", "Runner", "Zahya Sadeghi", "0"],
+        ["T3", "Alice", "Corp", "Nuvem", "3"],
+        ["", "Bob", "Runner", "Zahya", "0"],
     ]
     (winner, loser) = table.groups[0]
     assert winner[1].bold and winner[1].color == c.TEXT
@@ -201,8 +216,8 @@ def test_double_sided_columns_and_game_cells() -> None:
         messages.TOTAL,
     ]
     assert _texts(table) == [
-        ["T2", "Alice", "C Nuvem SA", "3", "R —", "0", "3"],
-        ["", "Bob", "R Zahya Sadeghi", "0", "C —", "–", "0"],
+        ["T2", "Alice", "C Nuvem", "3", "R —", "0", "3"],
+        ["", "Bob", "R Zahya", "0", "C —", "–", "0"],
     ]
 
 

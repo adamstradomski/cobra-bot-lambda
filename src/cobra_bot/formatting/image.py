@@ -32,13 +32,7 @@ from cobra_bot.formatting.document import EMBED_COLOR, Document
 from cobra_bot.formatting.pairings import format_pairings
 from cobra_bot.formatting.players import format_player_cards
 from cobra_bot.formatting.standings import format_standings
-from cobra_bot.formatting.text import (
-    code_text,
-    corp_label,
-    fit,
-    runner_label,
-    short_identity,
-)
+from cobra_bot.formatting.text import code_text, corp_label, fit, runner_label
 
 # Bump when the drawing changes in a way the cells and style constants in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
@@ -46,7 +40,6 @@ RENDER_VERSION = 1
 MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 pages
 MAX_MESSAGES = DISCORD_LIMITS.messages
 NAME_CHARS = 28
-ID_CHARS = 14  # longer IDs show their short name (identities.py, at most 9)
 
 # Discord's dark theme.
 BACKGROUND = "#2b2d31"
@@ -349,16 +342,13 @@ def _game(tag: str, identity: str | None, color: str) -> Cell:
 
 
 def _identity(identity: str | None, color: str) -> Cell:
-    """The ID's name before `:` if it fits in `ID_CHARS`, else its short name
-    (`Magdalene Keino-Chemutai` -> `Magdalene`), never cut mid-word. `color`
-    is CORP or RUNNER and picks the side's short-name map."""
-    label = short_identity(identity)
+    """The ID's short name from `identities.py` (`Weyland Consortium` ->
+    `Weyland`), the same as in every other reply; `color` is CORP or RUNNER and
+    picks the side's map. An unknown ID is the secondary `—`."""
+    label = (corp_label if color == CORP else runner_label)(identity)
     if label == messages.UNKNOWN_IDENTITY:
         return Cell(label, SECONDARY)
-    name = code_text(label)
-    if len(name) > ID_CHARS:
-        name = (corp_label if color == CORP else runner_label)(identity)
-    return Cell(name, color)
+    return Cell(label, color)
 
 
 def _name(p: Player) -> str:
