@@ -14,6 +14,7 @@ Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned 
 | `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
+| `uv run --env-file .env scripts/preview.py 5018 pairings` | Posts a reply rendered from a local export to your Discord test channel, without deploying; see [`preview.py`](#scriptspreviewpy--see-a-reply-in-discord-without-deploying). |
 
 All four checks must pass before a change is merged. GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs them on every push and pull request, after `uv sync --locked`, which fails if `uv.lock` is out of date with `pyproject.toml`; it then runs `sam validate --lint` and `sam build`. On `main`, a successful CI run triggers the deploy workflow ([Automatic deployment from main](#automatic-deployment-from-main)).
 
@@ -332,3 +333,42 @@ uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--s
 **Exit codes:** SAM's own exit code (`0` on success); `0` when Ctrl+C stops `logs tail`; `130` when Ctrl+C stops any other command; `2` invalid arguments, a bad `WINDOW`, neither `sam` nor `uvx` on `PATH`, or `samconfig.local.toml` missing, not valid TOML, without the chosen `--config-env`, or (for `logs`) without a stack name.
 
 > **Running from the Claude desktop app on Windows:** the app is an MSIX package, so writes to `%APPDATA%\uv` are virtualised, and uv's Python install fails with `os error 17`. If you hit this, set `UV_PYTHON_INSTALL_DIR` to a directory outside `%APPDATA%`. uv run from a normal terminal is not affected.
+
+### `scripts/preview.py` — see a reply in Discord without deploying
+
+Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the formatters, `message_payload`), so the embeds are byte for byte the ones the bot sends; `tests/scripts/test_preview.py` checks them against the golden files. It runs in the project environment, so it uses your working copy of `cobra_bot`.
+
+```bash
+uv run --env-file .env scripts/preview.py SOURCE pairings [--round N] [OPTIONS]
+uv run --env-file .env scripts/preview.py SOURCE standings [OPTIONS]
+uv run --env-file .env scripts/preview.py SOURCE player QUERY [OPTIONS]
+```
+
+Options go after the subcommand, e.g. `scripts/preview.py 5018 pairings --round 2 --stale`.
+
+| Argument / option | Default | Meaning |
+|-------------------|---------|---------|
+| `SOURCE` | — | A tournament ID: the newest `snapshots/{ID}/{ts}.json` (not `*.meta.json`), written by `capture_snapshots.py`. Or a path to a Cobra export, e.g. `tests/fixtures/dss.json`. |
+| `pairings [--round N]` / `standings` / `player QUERY` | — | Same subcommands and options as `/cobra`. Without `--round`, the latest round. |
+| `--dry-run` | off | Print the JSON payloads to stdout (UTF-8) instead of posting them. Needs no webhook. |
+| `--stale` | off | Render as stale data with Cobra unavailable (the cached copy is 10 minutes old). |
+| `--private` | off | Render as stale data because the tournament became private. Not with `--stale`. |
+| `--id N` | from `SOURCE` | Tournament ID used in the Cobra links. Default: `SOURCE` itself, or the name of the export's directory if it is a number, else `1`. Must be positive. |
+| `DISCORD_PREVIEW_WEBHOOK_URL` | — | Channel webhook URL, `https://discord.com/api/webhooks/<id>/<token>`. Required without `--dry-run`. It contains a secret token and is never printed. |
+
+**Local data.** The snapshots of a single-sided (4909) and a double-sided (5018) tournament are in `snapshots/` (see `snapshots/README.md`). For another tournament, capture it once:
+
+```bash
+uv run scripts/capture_snapshots.py <ID> --once
+```
+
+**One-time setup.**
+
+1. On your test server: **Server Settings → Integrations → Webhooks → New Webhook**, pick the channel, and optionally give it the bot's name and avatar so the messages look like the bot's. **Copy Webhook URL**.
+2. Put it into `.env` in the repository root (git-ignored), one line: `DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…`. `uv run --env-file .env` loads it, and stops with `No environment file found` if the file is missing. Setting the variable in your shell and dropping `--env-file .env` works too.
+
+**How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Channel webhooks cannot post ephemeral messages, so `player` replies are public in the preview (the script says so on stderr). Discord applies the same embed limits and rendering to both.
+
+It prints one line to stderr when done, e.g. `preview: standings of 20261001T160955Z.json sent as 2 message(s) in 420 ms`. Warnings from the formatters (such as an identity missing from the short-name map) are printed too.
+
+**Exit codes:** `0` posted, or printed with `--dry-run`; `1` Discord rejected a post or could not be reached (HTTP status or error type is printed, never the URL); `2` invalid arguments, no snapshot for the ID, an unreadable `SOURCE`, or `DISCORD_PREVIEW_WEBHOOK_URL` missing or not a webhook URL.
