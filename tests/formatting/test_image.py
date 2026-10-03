@@ -524,3 +524,128 @@ def test_ac22_double_sided_shows_both_games(raw_fixture: LoadRaw) -> None:
             first, second = group
             assert first[2].text.startswith("C ") and first[4].text.startswith("R ")
             assert second[2].text.startswith("R ") and second[4].text.startswith("C ")
+
+
+# --- player search ----------------------------------------------------------------
+
+
+def _player_row(t: Tournament, pid: int) -> list[str]:
+    player_ = t.player(pid)
+    assert player_ is not None
+    (group,) = c.players_table(t, [player_]).groups
+    return [cell.text for cell in group[0]]
+
+
+def test_players_table_columns_after_a_round() -> None:
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
+    )
+
+    table = c.players_table(t, list(PLAYERS))
+
+    assert [col.heading for col in table.columns] == [
+        "#",
+        "Player",
+        "Corp",
+        "Runner",
+        "Pts",
+        "SoS",
+        "Round 1",
+        "Side",
+        "Opponent",
+        "Score",
+    ]
+    assert len(table.groups) == 2  # one stripe per player
+
+
+def test_players_table_before_any_round_has_standings_columns_only() -> None:
+    t = tournament(players=PLAYERS)
+
+    table = c.players_table(t, list(PLAYERS))
+
+    assert [col.heading for col in table.columns][-1] == "SoS"
+    assert all(len(row) == 6 for group in table.groups for row in group)
+
+
+def test_player_row_single_sided_from_each_side() -> None:
+    """Seat order does not matter: each row is from that player's side."""
+    t = tournament(
+        (pairing(4, seat(2, "runner", 0), seat(1, "corp", 3)),), players=PLAYERS
+    )
+
+    assert _player_row(t, 1)[6:] == ["T4", "Corp", "Bob", "3 – 0"]
+    assert _player_row(t, 2)[6:] == ["T4", "Runner", "Alice", "0 – 3"]
+
+
+def test_player_score_won_bold_lost_secondary() -> None:
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
+    )
+
+    (won,) = c.players_table(t, [PLAYERS[0]]).groups[0]
+    (lost,) = c.players_table(t, [PLAYERS[1]]).groups[0]
+
+    assert (won[9].color, won[9].bold) == (c.SCORE, True)
+    assert (lost[9].color, lost[9].bold) == (c.SECONDARY, False)
+    assert (won[7].color, lost[7].color) == (c.CORP, c.RUNNER)
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "draw", "score"),
+    [(None, None, False, "–"), (1, 1, True, "ID"), (1, 1, False, "1 – 1")],
+)
+def test_player_score_without_a_winner(
+    first: int | None, second: int | None, draw: bool, score: str
+) -> None:
+    p = pairing(
+        1, seat(1, "corp", first), seat(2, "runner", second), intentional_draw=draw
+    )
+    t = tournament((p,), players=PLAYERS)
+
+    assert _player_row(t, 1)[9] == score
+
+
+def test_player_row_double_sided_shows_both_games_and_the_total() -> None:
+    t = tournament(
+        (pairing(2, seat(1, corp=3, runner=0), seat(2, corp=3, runner=None)),),
+        players=PLAYERS,
+    )
+
+    assert _player_row(t, 1)[6:] == ["T2", "C 3 · R 0", "Bob", "3 – 3"]
+    assert _player_row(t, 2)[6:] == ["T2", "C 3 · R –", "Alice", "3 – 3"]
+
+
+def test_player_row_bye_and_not_paired() -> None:
+    t = tournament((pairing(5, seat(1, None, 3), seat(None)),), players=PLAYERS)
+
+    assert _player_row(t, 1)[6:] == ["T5", "", messages.BYE, ""]
+    assert _player_row(t, 2)[6:] == ["—", "", "not paired", ""]
+
+
+def test_player_row_uses_the_latest_swiss_round_during_top_cut(
+    raw_fixture: LoadRaw,
+) -> None:
+    t = parse_tournament(
+        raw_fixture("single_sided_top8"), tournament_id=4909, fetched_at=FETCHED_AT
+    )
+
+    table = c.players_table(t, [t.players[0]])
+
+    assert table.columns[6].heading == "Round 8"
+
+
+def test_player_images_message(fonts: Fonts) -> None:
+    from cobra_bot.domain.search import search_names
+
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
+    )
+
+    (page,) = c.player_images(
+        t, search_names(t.players, "alice, zed"), "alice, zed", fonts
+    )
+
+    assert page.filename == "players-1.png"
+    assert page.embed.footer == "Round 1 · 1 player"
+    assert page.embed.description.startswith("**Players matching “alice, zed”**")
+    assert page.embed.description.endswith("No players match “zed”.")

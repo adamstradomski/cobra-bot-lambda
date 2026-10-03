@@ -4,14 +4,15 @@ Round numbers are 1-based positions in `Tournament.rounds`; Swiss rounds come
 first and elimination (top cut) rounds follow them in the same list.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cobra_bot.domain.models import Pairing, Player, Round, Tournament
+from cobra_bot.domain.search import normalize
 
 
 @dataclass(frozen=True)
 class NotStarted:
-    """The tournament has no rounds yet."""
+    """The tournament has no rounds yet (and, for standings, no players)."""
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class PairingsView:
 class StandingsView:
     after_round: int  # 0 = no completed Swiss round yet
     players: tuple[Player, ...]  # in Cobra's rank order
+    started: bool = True  # False: registration only, no round paired yet
 
 
 type PairingsResult = PairingsView | NotStarted | RoundOutOfRange | TopCutNotSupported
@@ -109,10 +111,29 @@ def standings_view(t: Tournament) -> StandingsResult:
     """Standings after the last complete Swiss round, using Cobra's rank as-is.
 
     With no complete round yet, the players are still listed in rank order (AC-08).
+    Before the first round is paired, the registered players are listed as Cobra
+    lists them then: by `name_order`, ranked 1 to N in that order (the export's
+    `rank` is not that order) (AC-26). With no players either, the
+    tournament has not started (AC-06).
     """
     if not t.rounds:
-        return NotStarted()
+        if not t.players:
+            return NotStarted()
+        by_name = sorted(t.players, key=lambda p: (*name_order(p.name), p.id))
+        return StandingsView(
+            after_round=0,
+            players=tuple(replace(p, rank=n) for n, p in enumerate(by_name, start=1)),
+            started=False,
+        )
     return StandingsView(
         after_round=last_complete_swiss_round(t),
         players=tuple(sorted(t.players, key=lambda p: p.rank)),
     )
+
+
+def name_order(name: str) -> tuple[str, str]:
+    """Sort key matching Cobra's player list: letters and digits only, ignoring
+    case and diacritics (`M.G.K.` between `metronome` and `Michael`, `VØRT3X`
+    after `Victor`), then the name ignoring case. Checked against Cobra's own
+    order of the 262 players of World Championship 2026."""
+    return "".join(c for c in normalize(name) if c.isalnum()), name.casefold()

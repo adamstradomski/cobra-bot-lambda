@@ -1,7 +1,7 @@
 """InteractionsFunction: Lambda Function URL entry point (SPEC §1, §3; NFR-04, NFR-07).
 
 Verify the signature, answer PING, acknowledge commands with a deferred response
-(ephemeral for `/cobra player`) and hand the work to the Worker asynchronously.
+(public for every command) and hand the work to the Worker asynchronously.
 
 Environment (set by the SAM template; nothing is hard-coded, so several bots or
 accounts can run the same code):
@@ -91,10 +91,7 @@ class InteractionsApp:
             log.exception("worker invoke failed for %s", command.name)
             return _ephemeral_message(messages.INTERNAL_ERROR)
         log.info("deferred %s", command.name)
-        deferred: Response = {"type": DEFERRED_CHANNEL_MESSAGE}
-        if command.ephemeral:
-            deferred["data"] = {"flags": EPHEMERAL}
-        return _response(200, deferred)
+        return _response(200, {"type": DEFERRED_CHANNEL_MESSAGE})
 
 
 def _body(event: Event) -> bytes:

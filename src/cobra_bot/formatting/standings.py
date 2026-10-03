@@ -43,11 +43,12 @@ BODY_WIDTH = NAME_WIDTH + POINTS_WIDTH
 def format_standings(
     t: Tournament, view: StandingsView, *, private: bool = False
 ) -> Document:
-    title_line = (
-        messages.standings_header(view.after_round)
-        if view.after_round
-        else messages.NO_COMPLETED_ROUNDS
-    )
+    if not view.started:
+        title_line = messages.REGISTERED_PLAYERS
+    elif view.after_round:
+        title_line = messages.standings_header(view.after_round)
+    else:
+        title_line = messages.NO_COMPLETED_ROUNDS
     width = rank_width(view.players)
     entries = []
     previous: Player | None = None

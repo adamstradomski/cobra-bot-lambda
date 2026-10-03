@@ -44,7 +44,7 @@ def test_command_shape_matches_spec_section_2() -> None:
         "type": 3,
         "required": True,
         "min_length": 1,
-        "max_length": 32,
+        "max_length": 200,
     }
 
 

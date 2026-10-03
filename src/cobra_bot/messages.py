@@ -28,6 +28,7 @@ def round_out_of_range(requested: int, last_round: int) -> str:
 
 TOP_CUT_IN_PROGRESS = "Top cut in progress — not supported yet"
 NO_COMPLETED_ROUNDS = "No completed rounds yet"
+REGISTERED_PLAYERS = "Registered players — not started yet"
 IN_PROGRESS = "in progress"
 COMPLETE = "complete"
 
@@ -69,6 +70,20 @@ def player_not_paired(round_number: int) -> str:
 
 def more_players_matched(count: int) -> str:
     return f"…and {count} more matched"
+
+
+def more_players_named(count: int, name: str) -> str:
+    """`name` must already be escaped for Discord markdown."""
+    return f"…and {count} more matched “{name}”"
+
+
+def no_player_named(name: str) -> str:
+    """`name` must already be escaped for Discord markdown."""
+    return f"No players match “{name}”."
+
+
+def names_skipped(count: int, limit: int) -> str:
+    return f"Only the first {limit} names were searched ({count} more given)."
 
 
 def omitted_entries(count: int, url: str) -> str:
@@ -131,6 +146,9 @@ IDENTITY = "ID"
 POINTS = "Pts"
 SOS = "SoS"
 TOTAL = "Total"
+OPPONENT = "Opponent"
+SCORE = "Score"
+NOT_PAIRED = "not paired"
 
 
 def game_heading(game: int) -> str:
@@ -153,12 +171,17 @@ def compact_pairings_footer(round_number: int, tables: int) -> str:
     return f"Round {round_number} · {_count(tables, 'table')}"
 
 
+def compact_players_footer(round_number: int | None, players: int) -> str:
+    parts = [f"Round {round_number}"] if round_number else []
+    return " · ".join([*parts, _count(players, "player")])
+
+
 # --- command registration (SPEC §2) --------------------------------------------
 
 COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
 PAIRINGS_DESCRIPTION = "Show pairings for a Swiss round"
 STANDINGS_DESCRIPTION = "Show the current standings"
-PLAYER_DESCRIPTION = "Find players and their latest pairing (only you see it)"
+PLAYER_DESCRIPTION = "Find players and their latest pairing"
 TOURNAMENT_OPTION_DESCRIPTION = "Cobra tournament ID, link or shortcode"
 ROUND_OPTION_DESCRIPTION = "Swiss round number (default: the latest)"
-QUERY_OPTION_DESCRIPTION = "Part of the player's name"
+QUERY_OPTION_DESCRIPTION = "Part of a player's name; several, separated by commas"

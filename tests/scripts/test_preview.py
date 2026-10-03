@@ -109,10 +109,7 @@ def test_dry_run_matches_what_the_worker_sends(
     )
     worker.handle(Job("app", "tok", command).to_payload())
 
-    sent = [_payload(r) for r in seen]
-    if command.ephemeral:  # the Worker's follow-ups carry the flag; webhooks cannot
-        sent = [{k: v for k, v in p.items() if k != "flags"} for p in sent]
-    assert previewed == sent
+    assert previewed == [_payload(r) for r in seen]
 
 
 def test_pairings_round_option_is_passed_on(
@@ -175,13 +172,13 @@ def test_stale_and_private_are_exclusive(preview_script: ModuleType) -> None:
 def test_dry_run_writes_utf8_whatever_the_console_encoding(
     preview_script: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The dss fixture has `Maëlig`; a cp1250 console (Polish Windows) cannot
-    encode `ë`. Player cards carry names as text."""
+    """A cp1250 console (Polish Windows) cannot encode `ë`; the query is
+    echoed in the header."""
     raw = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1250"))
 
     code = preview_script.main(
-        [DSS, "player", "maelig", "--dry-run"], env={}, clock=lambda: FETCHED_AT
+        [DSS, "player", "Maëlig", "--dry-run"], env={}, clock=lambda: FETCHED_AT
     )
 
     assert code == 0
@@ -323,16 +320,6 @@ def test_posts_every_payload_to_the_webhook(
     assert WEBHOOK_TOKEN not in capsys.readouterr().err
 
 
-def test_player_warns_that_the_preview_is_public(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    http, _ = _http()
-
-    assert preview_script.main([DSS, "player", "Player"], env=ENV, http=http) == 0
-
-    assert "replies privately" in capsys.readouterr().err
-
-
 def test_failed_post_exits_1_without_the_token(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -442,7 +429,9 @@ def test_save_images_without_images_writes_nothing(
 ) -> None:
     out = tmp_path / "png"
 
-    _dry_run(preview_script, capsys, [DSS, "player", "0029", "--save-images", str(out)])
+    _dry_run(
+        preview_script, capsys, [DSS, "player", "nobody", "--save-images", str(out)]
+    )
 
     assert list(out.iterdir()) == []
 
@@ -490,3 +479,20 @@ def test_rejected_post_prints_discords_reason_without_the_token(
     err = capsys.readouterr().err
     assert '{"attachments":["0"]}' in err.replace(" ", "")
     assert WEBHOOK_TOKEN not in err
+
+
+def test_webhook_url_comes_from_the_env_file(
+    preview_script: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DISCORD_PREVIEW_WEBHOOK_URL={WEBHOOK_URL}\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(preview_script, "ENV_FILE", env_file)
+    monkeypatch.delenv("DISCORD_PREVIEW_WEBHOOK_URL", raising=False)
+    http, seen = _http()
+
+    assert preview_script.main([DSS, "pairings", "--round", "99"], http=http) == 0
+
+    (request,) = seen
+    assert str(request.url).endswith(f"/webhooks/123/{WEBHOOK_TOKEN}")

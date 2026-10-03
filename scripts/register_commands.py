@@ -11,15 +11,19 @@ import json
 import os
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 
 import httpx
 
+from cobra_bot.envfile import environment
 from cobra_bot.registration import command_definition
 
 DISCORD_API = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (https://github.com/adamstradomski/cobra-bot-lambda, 0.1)"
 APP_ID_ENV = "DISCORD_APPLICATION_ID"
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
+# Read for the variables above; a variable set in the shell wins.
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -54,7 +58,7 @@ def main(
         print(json.dumps(payload(), indent=2, ensure_ascii=False))
         return EXIT_OK
 
-    env = os.environ if env is None else env
+    env = environment(ENV_FILE, os.environ) if env is None else env
     # Strip whitespace that copy-paste into a terminal prompt easily adds.
     application_id = (env.get(APP_ID_ENV) or "").strip()
     token = (env.get(TOKEN_ENV) or "").strip()

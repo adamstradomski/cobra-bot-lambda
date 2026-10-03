@@ -34,11 +34,14 @@ from cobra_bot.cobra.client import CobraError, Private, Unavailable
 from cobra_bot.commands import Command, CommandName, Images, Reply, execute
 from cobra_bot.discord import api as discord
 from cobra_bot.discord.api import Attachment, DiscordError, Payload, WebhookClient
+from cobra_bot.envfile import environment
 from cobra_bot.formatting.image import Fonts
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
 WEBHOOK_ENV = "DISCORD_PREVIEW_WEBHOOK_URL"
+# Read for WEBHOOK_ENV; a variable set in the shell wins.
+ENV_FILE = REPO_ROOT / ".env"
 # Tournament ID for an export outside snapshots/{id}/; only shows in Cobra links.
 DEFAULT_TOURNAMENT_ID = 1
 # Age of the cached copy for --stale / --private: past the TTL, so the cache
@@ -128,8 +131,7 @@ def offline_cache(
 
 
 def posts(reply: Reply) -> list[Post]:
-    """The messages the Worker would send. Channel webhooks cannot post
-    ephemeral messages, so none carries the ephemeral flag."""
+    """The messages the Worker would send."""
     if isinstance(reply, str):
         return [Post(discord.text_payload(reply))]
     if isinstance(reply, Images):
@@ -225,7 +227,11 @@ def main(
         path, tournament_id = resolve_source(args.source, snapshots, args.tournament_id)
         body = path.read_bytes()
         target = (
-            None if args.dry_run else webhook_target(os.environ if env is None else env)
+            None
+            if args.dry_run
+            else webhook_target(
+                environment(ENV_FILE, os.environ) if env is None else env
+            )
         )
         command = Command(
             name=cast(CommandName, args.command),
@@ -260,8 +266,6 @@ def main(
         return EXIT_OK
 
     webhook_id, token = target
-    if command.ephemeral:
-        print("preview: posted publicly; the bot replies privately", file=sys.stderr)
     started = time.monotonic()
     client = http or discord.make_http_client()
     try:

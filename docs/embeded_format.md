@@ -186,7 +186,7 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 
 | ID | Priority | Requirement |
 |----|----------|-------------|
-| I-1 | MUST | Standings and pairings show their table as a PNG attached to the message and shown in the embed (`image.url = attachment://{name}-{n}.png`). One image per message. |
+| I-1 | MUST | Standings, pairings and player search (when someone matches) show their table as a PNG attached to the message and shown in the embed (`image.url = attachment://{name}-{n}.png`). One image per message. |
 | I-2 | MUST | The embed keeps C-1 to C-3: the first message has the title, the Cobra link and the header (status line, top-cut note, `Data from <t:…:R>` or the stale notice). Later messages have no title or description. |
 | I-3 | MUST | Every embed has a legend in the footer: `Round 8 · 46 players` / `Round 8 · 23 tables`, plus `N / M` when there are several pages. Column headings in the image make a key unnecessary. |
 | I-4 | MUST | Columns with headings. Standings: `#`, Player, Corp, Runner, Pts, SoS — IDs before points and SoS. Single-sided pairings: Table, Player, Side, ID, Pts, two rows per table, the Corp first. Double-sided: Table, Player, Game 1 (`C`/`R` tag + ID, points), Game 2, Total; seat 1 (the Corp in game 1) first. Bye: `BYE` in the third column. |
@@ -197,4 +197,5 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 | I-9 | MUST | At most 40 rows per image. Standings fill every page (a points group may continue on the next one); a table is never split. At most 5 messages; past them, the last description ends with `…and N more — [full list on Cobra](url)`, N counting players or tables. |
 | I-10 | MUST | Text in the bundled Noto Sans Regular/Bold (SIL OFL, `src/cobra_bot/fonts/`): Lambda has no system fonts, and Pillow's built-in font lacks Latin Extended letters (`Żółw`). Drawn at twice the display size so text stays sharp when Discord scales it. |
 | I-11 | MUST | InteractionsFunction never imports Pillow (it must answer within 3 s); only the Worker draws images (`tests/handlers/test_import_cost.py`). |
+| I-13 | MUST | Player search: one row per player found, rank order: `#`, Player, Corp, Runner, Pts, SoS, then the latest Swiss round's table (`T6`, heading `Round N`), the side played (`Corp`/`Runner` in its colour; double-sided `C 3 · R 0`, secondary), the opponent, and the score from the player's side (`3 – 0`; bold won, secondary lost; `–`, `ID`, `BYE`, `not paired`). Before any round, only the standings columns. |
 | I-12 | SHOULD | Text in an image cannot be selected or searched; the Cobra link in the title gives the selectable version. |

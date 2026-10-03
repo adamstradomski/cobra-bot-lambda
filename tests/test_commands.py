@@ -1,7 +1,7 @@
 """`execute`: every command and every expected failure, at the commands layer
 (fake fetcher, in-memory store). The Worker end-to-end tests cover the wiring."""
 
-import re
+import json
 from collections.abc import Callable
 from datetime import timedelta
 
@@ -108,9 +108,12 @@ def test_standings() -> None:
 def test_player() -> None:
     cache, _ = _setup()
 
-    reply = _messages(run(Command("player", "4909", query="layer0017"), cache))
+    reply = _images(run(Command("player", "4909", query="layer0017"), cache))
 
-    assert re.search(r"^ 2[.] Player0017 +18$", _text(reply), re.MULTILINE)
+    (page,) = reply.pages
+    assert page.embed.description.startswith("**Players matching “layer0017”**")
+    assert page.embed.footer == "Round 8 · 1 player"
+    assert page.filename == "players-1.png"
 
 
 def test_shortcode_reference() -> None:
@@ -211,3 +214,30 @@ def test_unreadable_export(body: bytes) -> None:
     cache = _cache(Fetcher({4909: body}))
 
     assert run(Command("standings", "4909"), cache) == messages.COBRA_DATA_UNREADABLE
+
+
+def test_ac26_standings_before_the_first_round_list_the_registered_players() -> None:
+    """Players registered, no round paired: standings list them; pairings say
+    the tournament has not started."""
+    export = json.loads(fixture_bytes("dss"))
+    export["rounds"] = []
+    cache = _cache(Fetcher({5132: json.dumps(export).encode()}))
+
+    standings = _images(run(Command("standings", "5132"), cache))
+    pairings = run(Command("pairings", "5132"), cache)
+
+    first = standings.pages[0].embed
+    assert first.description.startswith("**Registered players — not started yet**\n")
+    assert first.footer == "31 players"
+    assert pairings == messages.NOT_STARTED
+
+
+def test_player_list_shows_every_named_player() -> None:
+    """Several comma-separated names: one card per matching player."""
+    cache, _ = _setup()
+
+    reply = _images(run(Command("player", "4909", query="0017, 0042, nobody"), cache))
+
+    (page,) = reply.pages
+    assert page.embed.footer == "Round 8 · 2 players"
+    assert page.embed.description.endswith("No players match “nobody”.")
