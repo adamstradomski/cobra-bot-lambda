@@ -47,6 +47,11 @@ def aws_ops() -> ModuleType:
     return _load_script("aws_ops")
 
 
+@pytest.fixture(scope="session")
+def preview_script() -> ModuleType:
+    return _load_script("preview")
+
+
 @pytest.fixture(autouse=True)
 def _clear_id_label_caches() -> Iterator[None]:
     """ID labels are cached per process (and log a missing ID once); every test

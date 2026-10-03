@@ -64,6 +64,12 @@ def message_payload(embeds: Sequence[Embed], *, ephemeral: bool = False) -> Payl
     return payload
 
 
+def text_payload(text: str) -> Payload:
+    """A single-embed reply, e.g. an error message: one sentence, no code block,
+    in the bot colour (embed format C-2, C-12)."""
+    return message_payload([Embed(description=text, color=EMBED_COLOR)])
+
+
 class WebhookClient:
     def __init__(
         self,
@@ -90,11 +96,8 @@ class WebhookClient:
                 self.follow_up(token, message_payload(message, ephemeral=ephemeral))
 
     def send_text(self, token: str, text: str) -> None:
-        """A single-embed reply, e.g. an error message, in place of the deferral:
-        one sentence, no code block, in the bot colour (embed format C-2, C-12)."""
-        self.edit_original(
-            token, message_payload([Embed(description=text, color=EMBED_COLOR)])
-        )
+        """`text_payload` in place of the deferral."""
+        self.edit_original(token, text_payload(text))
 
     def edit_original(self, token: str, payload: Payload) -> None:
         self._request("PATCH", f"{self._webhook(token)}/messages/@original", payload)
