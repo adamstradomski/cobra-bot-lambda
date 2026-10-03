@@ -61,10 +61,11 @@ def test_worker_events_expire_with_the_interaction_token(template: Template) -> 
 
 
 def test_worker_timeout_and_memory(template: Template) -> None:
+    """One full vCPU (1769 MB) to draw the reply images: at 256 MB a
+    262-player tournament took 20-26 s and timed out at 30 s."""
     props = _props(template, "WorkerFunction")
-    memory = props.get("MemorySize", template["Globals"]["Function"]["MemorySize"])
 
-    assert (props["Timeout"], memory) == (30, 256)
+    assert (props["Timeout"], props["MemorySize"]) == (60, 1769)
 
 
 def test_cache_bucket_is_private(template: Template) -> None:

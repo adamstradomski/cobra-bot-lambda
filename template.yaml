@@ -61,7 +61,10 @@ Resources:
     Properties:
       Description: Runs a deferred /cobra command and sends the reply.
       Handler: cobra_bot.handlers.worker.handler
-      Timeout: 30
+      # Lambda's CPU grows with memory: 1769 MB is one full vCPU. At 256 MB the
+      # five images of a 262-player tournament took 20-26 s and timed out.
+      MemorySize: 1769
+      Timeout: 60
       LoggingConfig:
         LogGroup:
           Ref: WorkerLogGroup
