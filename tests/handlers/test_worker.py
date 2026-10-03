@@ -96,21 +96,23 @@ def test_pairings_end_to_end() -> None:
     assert b"Content-Type: image/png" in request.content
 
 
-def test_standings_end_to_end_with_follow_ups(
+def test_standings_end_to_end_in_one_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pages of 10 rows: 46 players fill the 5 messages without drawing 235."""
+    """Pages of 10 rows: 46 players fill the 5 pages without drawing 235;
+    every page goes in the one reply message."""
     monkeypatch.setattr(image, "MAX_ROWS", 10)
     discord = Discord()
 
     _worker(discord).handle(_job(Command("standings", "4909")))
 
-    calls = discord.calls()
-    assert [c[0] for c in calls] == ["PATCH", "POST", "POST", "POST", "POST"]
-    assert all("flags" not in payload for _, _, payload in calls)
-    assert [p["attachments"] for _, _, p in calls] == [
-        [{"id": 0, "filename": f"standings-{n}.png"}] for n in range(1, 6)
+    ((method, _, payload),) = discord.calls()
+    assert method == "PATCH"
+    assert "flags" not in payload
+    assert payload["attachments"] == [
+        {"id": n, "filename": f"standings-{n + 1}.png"} for n in range(5)
     ]
+    assert len(payload["embeds"]) == 5  # type: ignore[arg-type]
 
 
 def test_player_end_to_end() -> None:

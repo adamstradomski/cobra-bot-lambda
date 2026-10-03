@@ -83,15 +83,24 @@ def message_payload(embeds: Sequence[Embed]) -> Payload:
     }
 
 
-def image_payload(page: ImagePage) -> Payload:
-    """The embed of an image page, with its PNG declared as attachment 0."""
-    payload = message_payload([page.embed])
-    payload["attachments"] = [{"id": 0, "filename": page.filename}]
+MAX_EMBEDS = 10  # per message (Discord)
+
+
+def image_payload(pages: Sequence[ImagePage]) -> Payload:
+    """One message showing every page: an embed per page, its PNG declared as
+    attachment n (sent as `files[n]`). One upload instead of one per page is
+    what makes a long reply fast."""
+    if not 1 <= len(pages) <= MAX_EMBEDS:
+        raise ValueError(f"{len(pages)} image pages; one message holds 1 to 10")
+    payload = message_payload([page.embed for page in pages])
+    payload["attachments"] = [
+        {"id": n, "filename": page.filename} for n, page in enumerate(pages)
+    ]
     return payload
 
 
-def image_file(page: ImagePage) -> Attachment:
-    return Attachment(page.filename, page.png, "image/png")
+def image_files(pages: Sequence[ImagePage]) -> tuple[Attachment, ...]:
+    return tuple(Attachment(p.filename, p.png, "image/png") for p in pages)
 
 
 def text_payload(text: str) -> Payload:
@@ -123,13 +132,8 @@ class WebhookClient:
                 self.follow_up(token, message_payload(message))
 
     def send_images(self, token: str, pages: Sequence[ImagePage]) -> None:
-        """Like `send`, one page per message, each with its PNG attached."""
-        for index, page in enumerate(pages):
-            files = (image_file(page),)
-            if index == 0:
-                self.edit_original(token, image_payload(page), files=files)
-            else:
-                self.follow_up(token, image_payload(page), files=files)
+        """Every page in one message, in place of the deferral."""
+        self.edit_original(token, image_payload(pages), files=image_files(pages))
 
     def send_text(self, token: str, text: str) -> None:
         """`text_payload` in place of the deferral."""

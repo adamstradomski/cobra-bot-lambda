@@ -136,8 +136,7 @@ def posts(reply: Reply) -> list[Post]:
         return [Post(discord.text_payload(reply))]
     if isinstance(reply, Images):
         return [
-            Post(discord.image_payload(page), (discord.image_file(page),))
-            for page in reply.pages
+            Post(discord.image_payload(reply.pages), discord.image_files(reply.pages))
         ]
     return [Post(discord.message_payload(message)) for message in reply]
 

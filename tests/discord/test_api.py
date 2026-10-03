@@ -337,27 +337,46 @@ def test_empty_description_is_left_out() -> None:
     assert "description" not in embed_payload(Embed("", footer="f"))
 
 
-def test_image_payload_declares_the_attachment() -> None:
-    payload = image_payload(_page(1, "head"))
+def test_image_payload_has_an_embed_and_attachment_per_page() -> None:
+    payload = image_payload([_page(1, "head"), _page(2), _page(3)])
 
-    assert payload["attachments"] == [{"id": 0, "filename": "p-1.png"}]
+    assert [e.get("image") for e in payload["embeds"]] == [  # type: ignore[union-attr]
+        {"url": f"attachment://p-{n}.png"} for n in (1, 2, 3)
+    ]
+    assert payload["attachments"] == [
+        {"id": n, "filename": f"p-{n + 1}.png"} for n in range(3)
+    ]
     assert payload["allowed_mentions"] == {"parse": []}
-    assert "flags" not in payload
+    assert "flags" not in payload  # public
 
 
-def test_image_pages_edit_the_original_then_follow_up_with_files() -> None:
+@pytest.mark.parametrize("count", [0, 11])
+def test_image_payload_holds_one_to_ten_pages(count: int) -> None:
+    """Discord allows at most 10 embeds per message."""
+    with pytest.raises(ValueError, match="1 to 10"):
+        image_payload([_page(n) for n in range(count)])
+
+
+def test_image_payload_ten_pages_is_the_limit() -> None:
+    assert len(image_payload([_page(n) for n in range(10)])["embeds"]) == 10  # type: ignore[arg-type]
+
+
+def test_image_pages_go_in_one_message_in_place_of_the_deferral() -> None:
+    """One upload instead of one per page: a long reply is that much faster."""
     recorder = Recorder()
 
     recorder.client().send_images(TOKEN, [_page(1, "head"), _page(2)])
 
-    first, second = recorder.requests
-    assert (first.method, str(first.url)) == ("PATCH", f"{WEBHOOK}/messages/@original")
-    assert (second.method, str(second.url)) == ("POST", WEBHOOK)
-    for request, n in ((first, 1), (second, 2)):
-        assert request.headers["Content-Type"].startswith("multipart/form-data")
-        assert f'name="files[0]"; filename="p-{n}.png"'.encode() in request.content
+    (request,) = recorder.requests
+    assert (request.method, str(request.url)) == (
+        "PATCH",
+        f"{WEBHOOK}/messages/@original",
+    )
+    assert request.headers["Content-Type"].startswith("multipart/form-data")
+    for n in (1, 2):
+        part = f'name="files[{n - 1}]"; filename="p-{n}.png"'.encode()
+        assert part in request.content
         assert b"\x89PNG-" + bytes([48 + n]) in request.content
-    assert b'"flags"' not in first.content + second.content  # public
 
 
 def test_image_reply_failure_does_not_leak_the_token() -> None:
