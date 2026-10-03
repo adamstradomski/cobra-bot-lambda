@@ -407,10 +407,10 @@ def test_long_replies_send_every_page(
 
     monkeypatch.setattr(image, "MAX_ROWS", 10)  # 31 players: 4 pages
 
-    payloads = _dry_run(preview_script, capsys, [DSS, "standings"])
+    (payload,) = _dry_run(preview_script, capsys, [DSS, "standings"])
 
-    assert [p["attachments"] for p in payloads] == [
-        [{"id": 0, "filename": f"standings-{n}.png"}] for n in range(1, 5)
+    assert payload["attachments"] == [
+        {"id": n, "filename": f"standings-{n + 1}.png"} for n in range(4)
     ]
 
 

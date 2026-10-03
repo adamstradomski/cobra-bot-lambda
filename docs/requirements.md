@@ -40,7 +40,7 @@ The bot is public. It can be added to any Discord server (server install) and by
 | FR-11 | Must | `<tournament>` accepts a numeric ID or a Cobra URL (any page under `/tournaments/{id}/…`). |
 | FR-12 | Should | `<tournament>` also accepts a shortcode (e.g. `HBYM`), if Cobra offers a reliable way to resolve it (see T01). |
 | FR-13 | Must | If the tournament has not started (no rounds), the bot says so; standings instead list the registered players, if there are any, as Cobra does (SPEC AC-26). |
-| FR-14 | Must | Output uses Discord embeds; standings, pairings and player search show their table as an image in the embed (decided 2026-10-03, SPEC §9). Long output is split across up to 5 messages; if it does not fit, the last message says how many entries were omitted and links to the full page on Cobra. |
+| FR-14 | Must | Output uses Discord embeds; standings, pairings and player search show their table as an image in the embed (decided 2026-10-03, SPEC §9). Long output is split across up to 5 messages (images: up to 5 pages, all in one message); if it does not fit, the last message (page) says how many entries were omitted and links to the full page on Cobra. |
 | FR-15 | Must | If Cobra is unavailable, the bot shows the last cached data with a note stating when it was fetched. If no cached data exists, it shows an error. |
 | FR-16 | Must | Clear user-facing errors for: invalid tournament reference, tournament not found, tournament private (without cache), round out of range, Cobra unavailable without cache. |
 | FR-17 | Must | All bot responses are in English. |

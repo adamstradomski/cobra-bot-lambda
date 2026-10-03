@@ -3,8 +3,8 @@
 Full colours on every client, real columns with headings, names and IDs not cut
 to code-block widths. The text cannot be selected or searched. The embed keeps
 the title link and header lines of `format_standings` / `format_pairings` and a
-short legend; a long table is split into pages of at most `MAX_ROWS` rows, one
-message each, at most `MAX_MESSAGES`.
+short legend; a long table is split into pages of at most `MAX_ROWS` rows, at
+most `MAX_MESSAGES`, an embed each, all sent in one message.
 
 Drawing is in memory and the fonts are injected (`cobra_bot.fonts.load`), so
 this module touches no files.
@@ -37,7 +37,7 @@ from cobra_bot.formatting.text import code_text, fit, short_identity
 # Bump when the drawing changes in a way the cells and style constants in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
 RENDER_VERSION = 1
-MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 messages
+MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 pages
 MAX_MESSAGES = DISCORD_LIMITS.messages
 NAME_CHARS = 28
 ID_CHARS = 24
@@ -565,9 +565,9 @@ def image_pages(
     row_entries: bool,
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
-    """One message per page, at most `MAX_MESSAGES`. The first has the title,
-    link and header; every one has the legend, and the page number when there
-    are several. Pages past the limit are dropped and the last message says how
+    """One embed and image per page, at most `MAX_MESSAGES` pages. The first has
+    the title, link and header; every one has the legend, and the page number
+    when there are several. Pages past the limit are dropped and the last says how
     many entries are missing, with the Cobra link (FR-14). An entry is a row
     with `row_entries` (a player; groups may then break across pages), else a
     group (a table, kept whole). `draw` replaces `render_png` (image cache)."""
