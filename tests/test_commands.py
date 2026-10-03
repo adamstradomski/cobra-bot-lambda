@@ -13,6 +13,8 @@ from cobra_bot import messages
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
 from cobra_bot.cobra.client import CobraError, NotFound, Private, Unavailable
 from cobra_bot.commands import Command, Images, Reply, execute
+from cobra_bot.domain.models import Player
+from cobra_bot.domain.rounds import name_order
 from cobra_bot.formatting.chunking import Message
 
 type LoadRaw = Callable[[str], object]
@@ -241,3 +243,37 @@ def test_player_list_shows_every_named_player() -> None:
     (page,) = reply.pages
     assert page.embed.footer == "Round 8 · 2 players"
     assert page.embed.description.endswith("No players match “nobody”.")
+
+
+def test_player_search_before_round_1_ranks_like_standings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-26: before the first round, search shows the rank standings show
+    (by name), not the export's registration order."""
+    from cobra_bot.formatting import image
+
+    drawn: list[tuple[str, int]] = []
+    real = image.players_table
+
+    def spy(t: object, players: list[Player]) -> object:
+        drawn.extend((p.name, p.rank) for p in players)
+        return real(t, players)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(image, "players_table", spy)
+    export = json.loads(fixture_bytes("dss"))
+    export["rounds"] = []
+    count = len(export["players"])
+    for n, entry in enumerate(export["players"]):
+        entry["rank"] = count - n  # registration order, not by name
+    cache = _cache(Fetcher({5132: json.dumps(export).encode()}))
+
+    run(Command("player", "5132", query="Player0001, Player0002"), cache)
+
+    by_name = sorted(
+        (e["name"] for e in export["players"]),
+        key=lambda name: name_order(name),
+    )
+    assert drawn == [
+        ("Player0001", by_name.index("Player0001") + 1),
+        ("Player0002", by_name.index("Player0002") + 1),
+    ]

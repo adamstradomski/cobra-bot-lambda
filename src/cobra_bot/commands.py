@@ -24,6 +24,7 @@ from cobra_bot.domain.rounds import (
     StandingsView,
     TopCutNotSupported,
     pairings_view,
+    ranked_players,
     standings_view,
 )
 from cobra_bot.domain.search import search_names
@@ -204,7 +205,7 @@ def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Rep
                     )
         case "player":
             query = command.query or ""
-            found = search_names(t.players, query)
+            found = search_names(ranked_players(t), query)
             if not found.matches:  # one sentence, no table to draw
                 return chunk(format_player_cards(t, found, query, private=private))
             return Images(image.player_images(t, found, query, fonts, private=private))

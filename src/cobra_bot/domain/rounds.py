@@ -116,19 +116,23 @@ def standings_view(t: Tournament) -> StandingsResult:
     `rank` is not that order) (AC-26). With no players either, the
     tournament has not started (AC-06).
     """
-    if not t.rounds:
-        if not t.players:
-            return NotStarted()
-        by_name = sorted(t.players, key=lambda p: (*name_order(p.name), p.id))
-        return StandingsView(
-            after_round=0,
-            players=tuple(replace(p, rank=n) for n, p in enumerate(by_name, start=1)),
-            started=False,
-        )
+    if not t.rounds and not t.players:
+        return NotStarted()
     return StandingsView(
         after_round=last_complete_swiss_round(t),
-        players=tuple(sorted(t.players, key=lambda p: p.rank)),
+        players=ranked_players(t),
+        started=bool(t.rounds),
     )
+
+
+def ranked_players(t: Tournament) -> tuple[Player, ...]:
+    """The players in standings order, with the rank standings show: Cobra's
+    `rank` once a round is paired; before that, 1 to N by `name_order`, as
+    Cobra lists registered players. Player search ranks by this too (AC-26)."""
+    if t.rounds:
+        return tuple(sorted(t.players, key=lambda p: p.rank))
+    by_name = sorted(t.players, key=lambda p: (*name_order(p.name), p.id))
+    return tuple(replace(p, rank=n) for n, p in enumerate(by_name, start=1))
 
 
 def name_order(name: str) -> tuple[str, str]:
