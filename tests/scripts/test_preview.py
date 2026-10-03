@@ -354,3 +354,275 @@ def test_accepted_webhook_url_forms(preview_script: ModuleType, url: str) -> Non
     )
 
     assert (webhook_id, token) == ("123", WEBHOOK_TOKEN)
+
+
+# --- formats under test (B1, B2, C) -------------------------------------------
+
+SSS = str(FIXTURES_DIR / "single_sided_top8.json")
+
+
+def _walk(payload: object) -> list[dict[str, object]]:
+    """Every dict nested in a payload."""
+    found: list[dict[str, object]] = []
+    stack = [payload]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            found.append(item)
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return found
+
+
+@pytest.fixture
+def default_font(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pillow's built-in font instead of a system font."""
+    from PIL import ImageFont
+
+    from cobra_bot.preview import image
+
+    font = ImageFont.load_default(image.FONT_SIZE)
+    monkeypatch.setattr(image, "load_fonts", lambda *_: image.Fonts(font, font))
+
+
+@pytest.mark.parametrize("layout", ["b1", "b2"])
+def test_v2_formats_swap_interactive_components_for_links(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], layout: str
+) -> None:
+    """A channel webhook rejects custom IDs and selects (HTTP 400)."""
+    (payload,) = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--format", layout, "--id", "5018"]
+    )
+
+    assert payload["flags"] == 1 << 15
+    nested = _walk(payload)
+    assert not [d for d in nested if "custom_id" in d or "options" in d]
+    buttons = [d for d in nested if d.get("type") == 2]
+    assert buttons
+    assert all(b["style"] == 5 for b in buttons)
+    assert {b["url"] for b in buttons} == {
+        "https://tournaments.nullsignal.games/tournaments/5018"
+    }
+
+
+def test_mockup_turns_the_round_select_into_link_rows(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (payload,) = _dry_run(preview_script, capsys, [DSS, "pairings", "--format", "b1"])
+
+    rounds = [
+        (d["label"], d["disabled"])
+        for d in _walk(payload)
+        if str(d.get("label", "")).startswith("Round ")
+    ]
+    assert sorted(rounds) == [("Round 1", False), ("Round 2", False), ("Round 3", True)]
+
+
+def test_mockup_splits_options_into_rows_of_five(preview_script: ModuleType) -> None:
+    select = {
+        "type": 3,
+        "custom_id": "cobra:round",
+        "options": [{"label": f"Round {n}", "value": str(n)} for n in range(1, 8)],
+    }
+    row = {"type": 1, "components": [select]}
+    payload = {"components": [{"type": 17, "components": [row]}]}
+
+    mocked = preview_script.link_mockup(payload, "https://x.test")
+
+    rows = mocked["components"][0]["components"]
+    assert [len(r["components"]) for r in rows] == [5, 2]
+
+
+def test_no_mockup_keeps_the_real_components(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (payload,) = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--no-mockup"]
+    )
+
+    nested = _walk(payload)
+    assert any(d.get("custom_id") == "cobra:next" for d in nested)
+    assert any(d.get("custom_id") == "cobra:round" for d in nested)
+
+
+def test_v2_posts_ask_the_webhook_to_keep_components(
+    preview_script: ModuleType,
+) -> None:
+    http, seen = _http()
+
+    code = preview_script.main([DSS, "standings", "--format", "b2"], env=ENV, http=http)
+
+    assert code == 0
+    (request,) = seen
+    assert request.url.params["with_components"] == "true"
+
+
+def test_a_posts_do_not_set_with_components(preview_script: ModuleType) -> None:
+    http, seen = _http()
+
+    assert preview_script.main([DSS, "standings"], env=ENV, http=http) == 0
+
+    assert all("with_components" not in r.url.params for r in seen)
+
+
+@pytest.mark.parametrize("layout", ["b1", "b2", "c"])
+def test_error_reply_is_the_bots_text_in_every_format(
+    preview_script: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    layout: str,
+    default_font: None,
+) -> None:
+    payloads = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--round", "99", "--format", layout]
+    )
+
+    assert payloads == [text_payload(messages.round_out_of_range(99, 3))]
+
+
+@pytest.mark.parametrize("layout", ["b2", "c"])
+def test_player_has_only_formats_a_and_b1(
+    preview_script: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    layout: str,
+    default_font: None,
+) -> None:
+    code = preview_script.main(
+        [DSS, "player", "Player", "--format", layout, "--dry-run"], env={}
+    )
+
+    assert code == 2
+    assert "pairings and standings" in capsys.readouterr().err
+
+
+def test_b1_player_cards(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (payload,) = _dry_run(
+        preview_script, capsys, [DSS, "player", "Player0029", "--format", "b1"]
+    )
+
+    assert "Player0029" in json.dumps(payload)
+
+
+def test_page_option_picks_one_page(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    every = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--all-pages"]
+    )
+    second = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--page", "2"]
+    )
+
+    assert len(every) == 2
+    assert second == [every[1]]
+
+
+def test_page_past_the_last_is_a_usage_error(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = preview_script.main(
+        [DSS, "pairings", "--format", "b1", "--page", "3", "--dry-run"], env={}
+    )
+
+    assert code == 2
+    assert "has 2 page(s)" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "x"])
+def test_page_must_be_a_positive_number(preview_script: ModuleType, value: str) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        preview_script.main([DSS, "standings", "--format", "b1", "--page", value])
+
+    assert exit_info.value.code == 2
+
+
+def test_page_and_all_pages_are_exclusive(preview_script: ModuleType) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        preview_script.main([DSS, "standings", "--page", "1", "--all-pages"])
+
+    assert exit_info.value.code == 2
+
+
+def test_c_posts_the_png_as_multipart(
+    preview_script: ModuleType, default_font: None
+) -> None:
+    http, seen = _http()
+
+    code = preview_script.main(
+        [SSS, "pairings", "--round", "1", "--format", "c"], env=ENV, http=http
+    )
+
+    assert code == 0
+    (request,) = seen
+    assert request.headers["Content-Type"].startswith("multipart/form-data")
+    assert b'filename="pairings-1.png"' in request.content
+    assert b"attachment://pairings-1.png" in request.content
+
+
+def test_save_images_writes_the_pngs(
+    preview_script: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    default_font: None,
+) -> None:
+    out = tmp_path / "png"
+
+    _dry_run(
+        preview_script,
+        capsys,
+        [DSS, "standings", "--format", "c", "--save-images", str(out)],
+    )
+
+    assert (out / "standings-1.png").read_bytes().startswith(b"\x89PNG")
+
+
+def test_missing_font_is_a_usage_error(
+    preview_script: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cobra_bot.preview import image
+
+    def no_font(*_: object) -> image.Fonts:
+        raise image.FontNotFound("no system font found; pass one with --font")
+
+    monkeypatch.setattr(image, "load_fonts", no_font)
+
+    code = preview_script.main([DSS, "standings", "--format", "c", "--dry-run"], env={})
+
+    assert code == 2
+    assert "--font" in capsys.readouterr().err
+
+
+def test_note_is_posted_first_as_plain_text(preview_script: ModuleType) -> None:
+    http, seen = _http()
+
+    code = preview_script.main(
+        [DSS, "standings", "--note", "## B2 @everyone"], env=ENV, http=http
+    )
+
+    assert code == 0
+    first, *rest = (json.loads(r.content) for r in seen)
+    assert first == {"content": "## B2 @everyone", "allowed_mentions": {"parse": []}}
+    assert rest
+    assert all("embeds" in p for p in rest)
+
+
+def test_rejected_post_prints_discords_reason_without_the_token(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"components": ["0"]})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+
+    code = preview_script.main(
+        [DSS, "standings", "--format", "b1", "--no-mockup"], env=ENV, http=http
+    )
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert '{"components":["0"]}' in err.replace(" ", "")
+    assert WEBHOOK_TOKEN not in err

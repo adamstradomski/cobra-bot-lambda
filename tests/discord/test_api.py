@@ -6,8 +6,10 @@ import pytest
 
 from builders import pairing, player, seat, tournament
 from cobra_bot.discord.api import (
+    DETAIL_CHARS,
     EPHEMERAL,
     USER_AGENT,
+    Attachment,
     DiscordError,
     WebhookClient,
     make_http_client,
@@ -258,3 +260,71 @@ def test_network_error_is_not_retried_and_does_not_leak_the_token() -> None:
 def test_http_client_user_agent() -> None:
     with make_http_client() as http:
         assert http.headers["User-Agent"] == USER_AGENT
+
+
+def test_http_error_keeps_discords_reason_out_of_the_message() -> None:
+    """`detail` says which field Discord rejected; the message stays short."""
+    recorder = Recorder(httpx.Response(400, text='{"components": ["0"]}'))
+
+    with pytest.raises(DiscordError) as excinfo:
+        recorder.client().follow_up(TOKEN, {})
+    assert str(excinfo.value) == "POST failed: HTTP 400"
+    assert excinfo.value.detail == '{"components": ["0"]}'
+
+
+def test_http_error_detail_is_cut() -> None:
+    recorder = Recorder(httpx.Response(400, text="x" * 1000))
+
+    with pytest.raises(DiscordError) as excinfo:
+        recorder.client().follow_up(TOKEN, {})
+    assert len(excinfo.value.detail) == DETAIL_CHARS
+
+
+# --- attachments and components (scripts/preview.py) -----------------------------
+
+
+def test_follow_up_without_extras_sends_json_and_no_query() -> None:
+    recorder = Recorder()
+
+    recorder.client().follow_up(TOKEN, {"content": "x"})
+
+    (request,) = recorder.requests
+    assert str(request.url) == WEBHOOK
+    assert request.headers["Content-Type"] == "application/json"
+
+
+def test_follow_up_with_components_asks_the_webhook_to_keep_them() -> None:
+    recorder = Recorder()
+
+    recorder.client().follow_up(TOKEN, {"components": []}, with_components=True)
+
+    (request,) = recorder.requests
+    assert str(request.url) == f"{WEBHOOK}?with_components=true"
+    assert json.loads(request.content) == {"components": []}
+
+
+def test_follow_up_with_files_sends_multipart() -> None:
+    recorder = Recorder()
+    payload = {"attachments": [{"id": 0, "filename": "a.png"}]}
+
+    recorder.client().follow_up(
+        TOKEN, payload, files=[Attachment("a.png", b"\x89PNG-bytes", "image/png")]
+    )
+
+    (request,) = recorder.requests
+    assert request.headers["Content-Type"].startswith("multipart/form-data")
+    body = request.content
+    assert b'name="payload_json"' in body
+    assert json.dumps(payload).encode() in body
+    assert b'name="files[0]"; filename="a.png"' in body
+    assert b"Content-Type: image/png" in body
+    assert b"\x89PNG-bytes" in body
+
+
+def test_multipart_429_is_retried_with_the_files() -> None:
+    recorder = Recorder(httpx.Response(429, headers={"Retry-After": "0.5"}))
+
+    recorder.client().follow_up(TOKEN, {}, files=[Attachment("a.png", b"img")])
+
+    assert len(recorder.requests) == 2
+    assert all(b"img" in r.content for r in recorder.requests)
