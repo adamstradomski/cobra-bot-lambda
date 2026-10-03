@@ -155,7 +155,7 @@ def test_pad_uses_display_width(text: str, padded: str) -> None:
         ("Earth Station: SEA Headquarters", "Earth St."),
         ("The Zwicky Group: Invisible Hands", "Zwicky"),
         ("Jinteki: Personal Evolution", "Jinteki"),  # fallback: the full name
-        ("Thunderbolt Armaments: Peace", "Thunderb…"),  # cut to 9 columns
+        ("Quantumflux Armaments: Peace", "Quantumf…"),  # cut to 9 columns
         (None, messages.UNKNOWN_IDENTITY),  # A-4
         ("", messages.UNKNOWN_IDENTITY),
         (": nameless", messages.UNKNOWN_IDENTITY),
@@ -177,7 +177,7 @@ def test_corp_label(identity: str | None, label: str) -> None:
         ('Kim "Ghost" Lee: X', "Ghost"),  # fallback: the nickname
         ("Ken “Express” Tenma: Disappeared Clone", "Express"),  # curly quotes
         ('Ken "" Tenma: Disappeared Clone', "Ken"),  # empty nickname: first word
-        ("Virtual Intelligence, P.I.: X", "Virtual"),  # first word, comma dropped
+        ("Quill, P.I.: X", "Quill"),  # first word, comma dropped
         ("Rielle Peddler: Transhuman", "Rielle"),
         ("Wolfgangerovich Smith: X", "Wolfgang…"),  # cut to 9 columns
         (None, messages.UNKNOWN_IDENTITY),
@@ -198,12 +198,12 @@ def test_short_names_fit_the_column() -> None:
 def test_missing_id_is_logged_once(caplog: pytest.LogCaptureFixture) -> None:
     """A-2 / acceptance 6: a fallback logs a warning, once per ID."""
     with caplog.at_level(logging.WARNING):
-        corp_label("Jinteki: Personal Evolution")
-        corp_label("Jinteki: Personal Evolution")
+        corp_label("Kestrel Biolabs: Personal Evolution")
+        corp_label("Kestrel Biolabs: Personal Evolution")
         runner_label("Rielle Peddler: Transhuman")
 
     assert [r.getMessage() for r in caplog.records] == [
-        "corp ID missing from the short-name map: Jinteki",
+        "corp ID missing from the short-name map: Kestrel Biolabs",
         "runner ID missing from the short-name map: Rielle Peddler",
     ]
 
