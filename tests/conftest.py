@@ -6,6 +6,8 @@ from types import ModuleType
 
 import pytest
 
+from cobra_bot import fonts as bundled_fonts
+from cobra_bot.formatting.image import Fonts
 from cobra_bot.formatting.text import corp_label, runner_label
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
@@ -66,3 +68,9 @@ def _clear_id_label_caches() -> Iterator[None]:
     yield
     corp_label.cache_clear()
     runner_label.cache_clear()
+
+
+@pytest.fixture(scope="session")
+def fonts() -> Fonts:
+    """The bundled fonts, loaded once (read-only)."""
+    return bundled_fonts.load()

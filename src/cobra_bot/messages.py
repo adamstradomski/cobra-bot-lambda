@@ -120,48 +120,28 @@ def tournament_fallback_name(tournament_id: int) -> str:
     return f"Tournament {tournament_id}"
 
 
-# --- layouts under test (cobra_bot.preview; not used by the bot yet) -------------
+# --- reply images (formatting.image) --------------------------------------------
 
-PREVIOUS_PAGE = "Prev"
-NEXT_PAGE = "Next"
-REFRESH = "Refresh"
-ROUND_PLACEHOLDER = "Choose a round"
-SOS = "SoS"
-TOTAL = "Total"
+# Column headings.
+RANK = "#"
 PLAYER = "Player"
 TABLE = "Table"
-POINTS = "Pts"
-RANK = "#"
 SIDE = "Side"
 IDENTITY = "ID"
-
-
-def page_indicator(page: int, pages: int) -> str:
-    return f"{page} / {pages}"
-
-
-def round_option(round_number: int) -> str:
-    return f"Round {round_number}"
-
-
-def game_label(game: int) -> str:
-    """Short label of a double-sided game: `G1`."""
-    return f"G{game}"
+POINTS = "Pts"
+SOS = "SoS"
+TOTAL = "Total"
 
 
 def game_heading(game: int) -> str:
     return f"Game {game}"
 
 
-# Side markers: the colours of format C, in text that looks the same on every
-# client (markdown has no colours outside code blocks).
-CORP_MARK = "🔵"
-RUNNER_MARK = "🟣"
-SIDE_LEGEND = f"{CORP_MARK} {CORP} · {RUNNER_MARK} {RUNNER}"
+def page_indicator(page: int, pages: int) -> str:
+    return f"{page} / {pages}"
 
 
-def points_label(points: int) -> str:
-    return f"{points} pts"
+# Legends below an image: the columns have headings, so no key is needed.
 
 
 def compact_standings_footer(after_round: int | None, players: int) -> str:

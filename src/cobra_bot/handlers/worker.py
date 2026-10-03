@@ -14,13 +14,14 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from cobra_bot import messages
+from cobra_bot import fonts, messages
 from cobra_bot.cobra import client as cobra
 from cobra_bot.cobra.cache import TournamentCache
 from cobra_bot.cobra.s3_store import S3CacheStore
-from cobra_bot.commands import Job, execute
+from cobra_bot.commands import Images, Job, execute
 from cobra_bot.discord import api as discord
 from cobra_bot.discord.api import DiscordError, WebhookClient
+from cobra_bot.formatting.image import Fonts
 from cobra_bot.handlers.logging_setup import configure_logging
 
 log = logging.getLogger(__name__)
@@ -32,9 +33,12 @@ type WebhookFactory = Callable[[str], WebhookClient]  # application ID -> client
 
 
 class WorkerApp:
-    def __init__(self, cache: TournamentCache, webhooks: WebhookFactory) -> None:
+    def __init__(
+        self, cache: TournamentCache, webhooks: WebhookFactory, fonts: Fonts
+    ) -> None:
         self._cache = cache
         self._webhooks = webhooks
+        self._fonts = fonts
 
     def handle(self, event: Event) -> None:
         try:
@@ -44,7 +48,7 @@ class WorkerApp:
             return
         started = time.monotonic()
         try:
-            reply = execute(job.command, self._cache)
+            reply = execute(job.command, self._cache, self._fonts)
         except Exception:
             log.exception("command %s failed", job.command.name)
             reply = messages.INTERNAL_ERROR
@@ -52,6 +56,10 @@ class WorkerApp:
         try:
             if isinstance(reply, str):
                 webhook.send_text(job.token, reply)
+            elif isinstance(reply, Images):
+                webhook.send_images(
+                    job.token, reply.pages, ephemeral=job.command.ephemeral
+                )
             else:
                 webhook.send(job.token, reply, ephemeral=job.command.ephemeral)
         except DiscordError as err:
@@ -81,7 +89,9 @@ def _app_from_environment() -> WorkerApp:  # pragma: no cover - needs AWS
         store, cobra.CobraClient(cobra.make_http_client()), clock=utc_now
     )
     discord_http = discord.make_http_client()
-    return WorkerApp(cache, lambda app_id: WebhookClient(discord_http, app_id))
+    return WorkerApp(
+        cache, lambda app_id: WebhookClient(discord_http, app_id), fonts.load()
+    )
 
 
 def handler(event: Event, context: object) -> None:

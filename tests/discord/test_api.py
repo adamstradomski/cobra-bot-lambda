@@ -12,6 +12,8 @@ from cobra_bot.discord.api import (
     Attachment,
     DiscordError,
     WebhookClient,
+    embed_payload,
+    image_payload,
     make_http_client,
 )
 from cobra_bot.domain.rounds import (
@@ -20,7 +22,7 @@ from cobra_bot.domain.rounds import (
     pairings_view,
     standings_view,
 )
-from cobra_bot.formatting.chunking import FIELD_NAME, Embed, chunk
+from cobra_bot.formatting.chunking import FIELD_NAME, Embed, ImagePage, chunk
 from cobra_bot.formatting.pairings import format_pairings
 from cobra_bot.formatting.standings import format_standings
 
@@ -293,16 +295,6 @@ def test_follow_up_without_extras_sends_json_and_no_query() -> None:
     assert request.headers["Content-Type"] == "application/json"
 
 
-def test_follow_up_with_components_asks_the_webhook_to_keep_them() -> None:
-    recorder = Recorder()
-
-    recorder.client().follow_up(TOKEN, {"components": []}, with_components=True)
-
-    (request,) = recorder.requests
-    assert str(request.url) == f"{WEBHOOK}?with_components=true"
-    assert json.loads(request.content) == {"components": []}
-
-
 def test_follow_up_with_files_sends_multipart() -> None:
     recorder = Recorder()
     payload = {"attachments": [{"id": 0, "filename": "a.png"}]}
@@ -328,3 +320,58 @@ def test_multipart_429_is_retried_with_the_files() -> None:
 
     assert len(recorder.requests) == 2
     assert all(b"img" in r.content for r in recorder.requests)
+
+
+# --- image replies ------------------------------------------------------------------
+
+
+def _page(n: int, description: str = "") -> ImagePage:
+    embed = Embed(description=description, footer=f"page {n}", image=f"p-{n}.png")
+    return ImagePage(embed, f"p-{n}.png", b"\x89PNG-" + bytes([48 + n]))
+
+
+def test_embed_image_points_at_the_attachment() -> None:
+    assert embed_payload(Embed("d", image="standings-1.png"))["image"] == {
+        "url": "attachment://standings-1.png"
+    }
+
+
+def test_empty_description_is_left_out() -> None:
+    """Discord rejects an empty description; image pages after the first have
+    none."""
+    assert "description" not in embed_payload(Embed("", footer="f"))
+
+
+def test_image_payload_declares_the_attachment() -> None:
+    payload = image_payload(_page(1, "head"))
+
+    assert payload["attachments"] == [{"id": 0, "filename": "p-1.png"}]
+    assert payload["allowed_mentions"] == {"parse": []}
+    assert "flags" not in payload
+    assert image_payload(_page(1), ephemeral=True)["flags"] == EPHEMERAL
+
+
+def test_image_pages_edit_the_original_then_follow_up_with_files() -> None:
+    recorder = Recorder()
+
+    recorder.client().send_images(TOKEN, [_page(1, "head"), _page(2)], ephemeral=True)
+
+    first, second = recorder.requests
+    assert (first.method, str(first.url)) == ("PATCH", f"{WEBHOOK}/messages/@original")
+    assert (second.method, str(second.url)) == ("POST", WEBHOOK)
+    for request, n in ((first, 1), (second, 2)):
+        assert request.headers["Content-Type"].startswith("multipart/form-data")
+        assert f'name="files[0]"; filename="p-{n}.png"'.encode() in request.content
+        assert b"\x89PNG-" + bytes([48 + n]) in request.content
+    # The deferral already carries the ephemeral flag; follow-ups need it.
+    assert b'"flags"' not in first.content
+    assert f'"flags": {EPHEMERAL}'.encode() in second.content
+
+
+def test_image_reply_failure_does_not_leak_the_token() -> None:
+    recorder = Recorder(httpx.Response(413))
+
+    with pytest.raises(DiscordError) as excinfo:
+        recorder.client().send_images(TOKEN, [_page(1)], ephemeral=False)
+    assert str(excinfo.value) == "PATCH failed: HTTP 413"
+    assert TOKEN not in str(excinfo.value)

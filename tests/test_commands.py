@@ -8,13 +8,16 @@ from datetime import timedelta
 import pytest
 
 from builders import FETCHED_AT, FETCHED_AT_TAG, fixture_bytes, plain
+from cobra_bot import fonts as bundled_fonts
 from cobra_bot import messages
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
 from cobra_bot.cobra.client import CobraError, NotFound, Private, Unavailable
-from cobra_bot.commands import Command, execute
+from cobra_bot.commands import Command, Images, Reply, execute
 from cobra_bot.formatting.chunking import Message
 
 type LoadRaw = Callable[[str], object]
+
+FONTS = bundled_fonts.load()  # read-only, shared by every test
 
 
 class Fetcher:
@@ -58,6 +61,15 @@ def _setup() -> tuple[TournamentCache, Fetcher]:
     return _cache(fetcher), fetcher
 
 
+def run(command: Command, cache: TournamentCache) -> Reply:
+    return execute(command, cache, FONTS)
+
+
+def _images(reply: object) -> Images:
+    assert isinstance(reply, Images), reply
+    return reply
+
+
 def _messages(reply: object) -> tuple[Message, ...]:
     assert isinstance(reply, tuple), reply
     return reply
@@ -75,24 +87,28 @@ def _text(reply: tuple[Message, ...]) -> str:
 def test_pairings() -> None:
     cache, _ = _setup()
 
-    reply = _messages(execute(Command("pairings", "4909", round=1), cache))
+    reply = _images(run(Command("pairings", "4909", round=1), cache))
 
-    assert reply[0][0].title == "Single-Sided Top 8 Fixture"
-    assert re.search(r"^T21 BYE Player0023$", _text(reply), re.MULTILINE)
+    page = reply.pages[0]  # 23 tables, 46 players: two pages
+    assert page.embed.title == "Single-Sided Top 8 Fixture"
+    assert page.embed.description.startswith("**Round 1 pairings — complete**\n")
+    assert page.png.startswith(b"\x89PNG")
 
 
 def test_standings() -> None:
     cache, _ = _setup()
 
-    reply = _messages(execute(Command("standings", "4909"), cache))
+    reply = _images(run(Command("standings", "4909"), cache))
 
-    assert _text(reply).startswith("**Standings after round 8**\n")
+    page = reply.pages[0]  # 23 tables, 46 players: two pages
+    assert page.embed.description.startswith("**Standings after round 8**\n")
+    assert page.embed.image == page.filename == "standings-1.png"
 
 
 def test_player() -> None:
     cache, _ = _setup()
 
-    reply = _messages(execute(Command("player", "4909", query="layer0017"), cache))
+    reply = _messages(run(Command("player", "4909", query="layer0017"), cache))
 
     assert re.search(r"^ 2[.] Player0017 +18$", _text(reply), re.MULTILINE)
 
@@ -100,15 +116,17 @@ def test_player() -> None:
 def test_shortcode_reference() -> None:
     cache, _ = _setup()
 
-    reply = _messages(execute(Command("pairings", "qnsf"), cache))
+    reply = _images(run(Command("pairings", "qnsf"), cache))
 
-    assert _text(reply).startswith("**Round 3 pairings — in progress**")
+    assert reply.pages[0].embed.description.startswith(
+        "**Round 3 pairings — in progress**"
+    )
 
 
 def test_no_players_match() -> None:
     cache, _ = _setup()
 
-    reply = _messages(execute(Command("player", "4909", query="nobody"), cache))
+    reply = _messages(run(Command("player", "4909", query="nobody"), cache))
 
     assert "No players match." in _text(reply)
 
@@ -129,7 +147,7 @@ def test_no_players_match() -> None:
 def test_round_state_errors(command: Command, reply: str) -> None:
     cache, _ = _setup()
 
-    assert execute(command, cache) == reply
+    assert run(command, cache) == reply
 
 
 # --- FR-16 errors ---------------------------------------------------------------------
@@ -139,9 +157,7 @@ def test_round_state_errors(command: Command, reply: str) -> None:
 def test_invalid_reference(tournament: str) -> None:
     cache, _ = _setup()
 
-    assert (
-        execute(Command("standings", tournament), cache) == messages.INVALID_REFERENCE
-    )
+    assert run(Command("standings", tournament), cache) == messages.INVALID_REFERENCE
 
 
 @pytest.mark.parametrize(
@@ -152,7 +168,7 @@ def test_invalid_reference(tournament: str) -> None:
 def test_not_found(tournament: str, reply: str) -> None:
     cache, _ = _setup()
 
-    assert execute(Command("standings", tournament), cache) == reply
+    assert run(Command("standings", tournament), cache) == reply
 
 
 @pytest.mark.parametrize(
@@ -166,7 +182,7 @@ def test_cobra_failures_without_cache(error: CobraError, reply: str) -> None:
     cache, fetcher = _setup()
     fetcher.error = error
 
-    assert execute(Command("standings", "4909"), cache) == reply
+    assert run(Command("standings", "4909"), cache) == reply
 
 
 @pytest.mark.parametrize(
@@ -185,15 +201,13 @@ def test_stale_data_is_served_with_notice(error: CobraError, notice: str) -> Non
         store, fetcher, clock=lambda: FETCHED_AT + timedelta(minutes=10)
     )
 
-    reply = _messages(execute(Command("standings", "4909"), cache))
+    reply = _images(run(Command("standings", "4909"), cache))
 
-    assert _text(reply).split("\n")[1] == notice
+    assert reply.pages[0].embed.description.split("\n")[1] == notice
 
 
 @pytest.mark.parametrize("body", [b"not json", b'{"players": [{"rank": 1}]}'])
 def test_unreadable_export(body: bytes) -> None:
     cache = _cache(Fetcher({4909: body}))
 
-    assert (
-        execute(Command("standings", "4909"), cache) == messages.COBRA_DATA_UNREADABLE
-    )
+    assert run(Command("standings", "4909"), cache) == messages.COBRA_DATA_UNREADABLE

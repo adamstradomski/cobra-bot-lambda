@@ -3,16 +3,15 @@
 from a local Cobra export, to check the layout without building or deploying.
 
     uv run scripts/preview.py 5018 pairings --round 2
-    uv run scripts/preview.py 4909 standings --format b2
+    uv run scripts/preview.py 4909 standings --save-images out/
     uv run scripts/preview.py tests/fixtures/dss.json player 1003 --dry-run
 
-Format A, the default, is the bot's reply: it goes through the same code as the
-Worker (`commands.execute`, the cache, the parser, the formatters,
-`message_payload`), so the embeds are the production ones. Formats B2 and C
-are layouts under test (`cobra_bot.preview`) for the same data. Cobra is never
-contacted. Messages are posted through a channel webhook
-(`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the project environment. See README.md
-for options and exit codes.
+The reply goes through the same code as the Worker (`commands.execute`, the
+cache, the parser, the image renderer and formatters, the payload builders), so
+the messages are the production ones: images for pairings and standings, an
+embed for player cards. Cobra is never contacted. Messages are posted through a
+channel webhook (`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the project
+environment. See README.md for options and exit codes.
 """
 
 import argparse
@@ -29,21 +28,13 @@ from typing import cast
 
 import httpx
 
+from cobra_bot import fonts as bundled_fonts
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
 from cobra_bot.cobra.client import CobraError, Private, Unavailable
-from cobra_bot.cobra.parser import parse_tournament
-from cobra_bot.commands import Command, CommandName, Reply, execute
+from cobra_bot.commands import Command, CommandName, Images, Reply, execute
 from cobra_bot.discord import api as discord
 from cobra_bot.discord.api import Attachment, DiscordError, Payload, WebhookClient
-from cobra_bot.domain.models import Tournament
-from cobra_bot.domain.rounds import (
-    PairingsView,
-    StandingsView,
-    pairings_view,
-    standings_view,
-    swiss_round_numbers,
-)
-from cobra_bot.formatting.text import tournament_url
+from cobra_bot.formatting.image import Fonts
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
@@ -53,9 +44,6 @@ DEFAULT_TOURNAMENT_ID = 1
 # Age of the cached copy for --stale / --private: past the TTL, so the cache
 # asks Cobra (the fake below) and serves the copy marked stale.
 STALE_AGE = timedelta(minutes=10)
-FORMATS = ("a", "b2", "c")
-LINK_BUTTON = 5  # button style
-SELECT_ARROW = "▾"  # marks the link button that stands in for a select
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -69,7 +57,6 @@ _WEBHOOK_URL = re.compile(
 )
 
 type Clock = Callable[[], datetime]
-type Component = dict[str, object]
 
 
 class UsageError(Exception):
@@ -82,18 +69,6 @@ class Post:
 
     payload: Payload
     files: tuple[Attachment, ...] = ()
-    components: bool = False  # Components V2: the webhook must be told
-
-
-@dataclass(frozen=True)
-class Options:
-    """How to render the non-A formats."""
-
-    format: str = "a"
-    page: int | None = 1  # None = every page
-    mockup: bool = True  # swap interactive components for link buttons
-    font: Path | None = None
-    bold_font: Path | None = None
 
 
 class _OfflineCobra:
@@ -152,127 +127,17 @@ def offline_cache(
     )
 
 
-def render(
-    command: Command, body: bytes, tournament_id: int, now: datetime, data: str
-) -> Reply:
-    """Run `command` as the Worker does, with `body` as the cached export."""
-    return execute(command, offline_cache(body, tournament_id, now, data))
-
-
-def payloads(reply: Reply) -> list[Payload]:
-    """The bodies the Worker would send. Channel webhooks cannot post ephemeral
-    messages, so no payload carries the ephemeral flag."""
+def posts(reply: Reply) -> list[Post]:
+    """The messages the Worker would send. Channel webhooks cannot post
+    ephemeral messages, so none carries the ephemeral flag."""
     if isinstance(reply, str):
-        return [discord.text_payload(reply)]
-    return [discord.message_payload(message) for message in reply]
-
-
-def build_posts(
-    command: Command, cache: TournamentCache, tournament_id: int, options: Options
-) -> list[Post]:
-    """The messages for `options.format`. An error reply (unknown round, not
-    started, …) is the bot's text reply in every format."""
-    reply = execute(command, cache)
-    if options.format == "a" or isinstance(reply, str):
-        return [Post(p) for p in payloads(reply)]
-    result = cache.tournament(tournament_id)
-    t = parse_tournament(
-        json.loads(result.body),
-        tournament_id=tournament_id,
-        fetched_at=result.fetched_at,
-        stale=result.stale,
-    )
-    pages = _variant_pages(command, t, result.private, options)
-    if options.page is None:
-        return pages
-    if not 1 <= options.page <= len(pages):
-        raise UsageError(f"--page {options.page}: this reply has {len(pages)} page(s).")
-    return [pages[options.page - 1]]
-
-
-def _variant_pages(
-    command: Command, t: Tournament, private: bool, options: Options
-) -> list[Post]:
-    from cobra_bot.preview import components  # only for B2
-
-    view = (
-        pairings_view(t, command.round)
-        if command.name == "pairings"
-        else standings_view(t)
-        if command.name == "standings"
-        else None
-    )
-    nav = components.NO_ROUNDS
-    if isinstance(view, PairingsView):
-        nav = components.Nav(tuple(swiss_round_numbers(t)), view.round_number)
-    url = tournament_url(t.id)
-
-    def v2(payloads: list[Payload]) -> list[Post]:
-        if options.mockup:
-            payloads = [link_mockup(p, url) for p in payloads]
-        return [Post(p, components=True) for p in payloads]
-
-    match options.format:
-        case "b2" if isinstance(view, StandingsView):
-            return v2(components.b2_standings(t, view, private=private))
-        case "b2" if isinstance(view, PairingsView):
-            return v2(components.b2_pairings(t, view, nav, private=private))
-        case "c" if isinstance(view, StandingsView | PairingsView):
-            from cobra_bot.preview import image  # imports Pillow: only for C
-
-            try:
-                fonts = image.load_fonts(options.font, options.bold_font)
-            except image.FontNotFound as err:
-                raise UsageError(str(err)) from None
-            images = (
-                image.c_standings(t, view, fonts, private=private)
-                if isinstance(view, StandingsView)
-                else image.c_pairings(t, view, fonts, private=private)
-            )
-            return [Post(payload, (file,)) for payload, file in images]
-    raise UsageError(f"--format {options.format} supports pairings and standings.")
-
-
-def link_mockup(payload: Payload, url: str) -> Payload:
-    """Channel webhooks may post only non-interactive components, so every
-    button becomes a link button with the same label, and the round select one
-    link button showing the selected round (`Round 8 ▾`). Both keep the
-    component count of the real message, which Discord caps at 40. All links go
-    to `url`."""
-
-    def convert(components: object) -> list[object]:
-        out: list[object] = []
-        for item in components if isinstance(components, list) else []:
-            if not isinstance(item, dict):
-                out.append(item)
-            elif "options" in item:
-                out.append(_select_button(item, url))
-            elif "custom_id" in item:
-                button = {k: v for k, v in item.items() if k != "custom_id"}
-                out.append({**button, "style": LINK_BUTTON, "url": url})
-            elif "components" in item:
-                out.append({**item, "components": convert(item["components"])})
-            else:
-                out.append(item)
-        return out
-
-    return {**payload, "components": convert(payload.get("components"))}
-
-
-def _select_button(select: Component, url: str) -> Component:
-    options = select.get("options")
-    chosen = [
-        o
-        for o in (options if isinstance(options, list) else [])
-        if isinstance(o, dict) and o.get("default")
-    ]
-    label = chosen[0].get("label") if chosen else select.get("placeholder")
-    return {
-        "type": 2,
-        "style": LINK_BUTTON,
-        "label": f"{label} {SELECT_ARROW}",
-        "url": url,
-    }
+        return [Post(discord.text_payload(reply))]
+    if isinstance(reply, Images):
+        return [
+            Post(discord.image_payload(page), (discord.image_file(page),))
+            for page in reply.pages
+        ]
+    return [Post(discord.message_payload(message)) for message in reply]
 
 
 def webhook_target(env: Mapping[str, str]) -> tuple[str, str]:
@@ -287,16 +152,6 @@ def webhook_target(env: Mapping[str, str]) -> tuple[str, str]:
             "(https://discord.com/api/webhooks/<id>/<token>)."
         )
     return match[1], match[2]
-
-
-def _positive(text: str) -> int:
-    try:
-        value = int(text)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a number: {text!r}") from None
-    if value < 1:
-        raise argparse.ArgumentTypeError(f"must be at least 1: {value}")
-    return value
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -328,34 +183,7 @@ def _parser() -> argparse.ArgumentParser:
         help="tournament ID used in Cobra links (default: from SOURCE)",
     )
     common.add_argument(
-        "--format",
-        choices=FORMATS,
-        default="a",
-        help="a: the bot's embeds (default); b2, c: layouts under test",
-    )
-    pages = common.add_mutually_exclusive_group()
-    pages.add_argument(
-        "--page", type=_positive, default=1, help="b2, c: page to post (default 1)"
-    )
-    pages.add_argument(
-        "--all-pages",
-        dest="page",
-        action="store_const",
-        const=None,
-        help="b2, c: post every page",
-    )
-    common.add_argument(
-        "--no-mockup",
-        dest="mockup",
-        action="store_false",
-        help="b2: keep the real buttons and select (a channel webhook rejects them)",
-    )
-    common.add_argument("--font", type=Path, help="c: TrueType font file")
-    common.add_argument(
-        "--bold-font", type=Path, help="c: bold TrueType font (default: --font)"
-    )
-    common.add_argument(
-        "--save-images", type=Path, metavar="DIR", help="c: also write the PNGs here"
+        "--save-images", type=Path, metavar="DIR", help="also write the PNGs here"
     )
     common.add_argument(
         "--note",
@@ -387,12 +215,12 @@ def main(
     http: httpx.Client | None = None,
     clock: Clock = lambda: datetime.now(UTC),
     snapshots: Path = SNAPSHOTS_DIR,
+    fonts: Fonts | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
     if args.tournament_id is not None and args.tournament_id < 1:
         print("preview: --id must be a positive number", file=sys.stderr)
         return EXIT_USAGE
-    options = Options(args.format, args.page, args.mockup, args.font, args.bold_font)
     try:
         path, tournament_id = resolve_source(args.source, snapshots, args.tournament_id)
         body = path.read_bytes()
@@ -406,12 +234,13 @@ def main(
             query=getattr(args, "query", None),
         )
         cache = offline_cache(body, tournament_id, clock(), args.data)
-        posts = build_posts(command, cache, tournament_id, options)
+        reply = execute(command, cache, fonts or bundled_fonts.load())
+        messages = posts(reply)
         if args.note:
             note: Payload = {"content": args.note, "allowed_mentions": {"parse": []}}
-            posts.insert(0, Post(note))
+            messages.insert(0, Post(note))
         if args.save_images is not None:
-            _save_images(posts, args.save_images)
+            _save_images(messages, args.save_images)
     except UsageError as err:
         print(f"preview: {err}", file=sys.stderr)
         return EXIT_USAGE
@@ -423,7 +252,7 @@ def main(
 
     if target is None:
         # UTF-8 whatever the console code page, so names and IDs print as is.
-        bodies = [post.payload for post in posts]
+        bodies = [message.payload for message in messages]
         text = json.dumps(bodies, indent=2, ensure_ascii=False) + "\n"
         sys.stdout.flush()
         sys.stdout.buffer.write(text.encode())
@@ -437,10 +266,8 @@ def main(
     client = http or discord.make_http_client()
     try:
         webhook = WebhookClient(client, webhook_id)
-        for post in posts:
-            webhook.follow_up(
-                token, post.payload, files=post.files, with_components=post.components
-            )
+        for message in messages:
+            webhook.follow_up(token, message.payload, files=message.files)
     except DiscordError as err:
         detail = f" (Discord: {err.detail})" if err.detail else ""
         print(f"preview: {err}{detail}", file=sys.stderr)
@@ -449,18 +276,17 @@ def main(
         if http is None:
             client.close()
     print(
-        f"preview: {command.name} of {path.name} in format {options.format.upper()} "
-        f"sent as {len(posts)} message(s) "
+        f"preview: {command.name} of {path.name} sent as {len(messages)} message(s) "
         f"in {(time.monotonic() - started) * 1000:.0f} ms",
         file=sys.stderr,
     )
     return EXIT_OK
 
 
-def _save_images(posts: list[Post], directory: Path) -> None:
+def _save_images(messages: list[Post], directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    for post in posts:
-        for file in post.files:
+    for message in messages:
+        for file in message.files:
             (directory / file.filename).write_bytes(file.content)
             print(f"preview: wrote {directory / file.filename}", file=sys.stderr)
 

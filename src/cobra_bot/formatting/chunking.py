@@ -39,6 +39,7 @@ class Embed:
     fields: tuple[str, ...] = ()  # field values; every field is named FIELD_NAME
     footer: str | None = None
     color: int | None = None
+    image: str | None = None  # filename of an attached image shown in the embed
 
     @property
     def chars(self) -> int:
@@ -52,6 +53,17 @@ class Embed:
 
 
 type Message = tuple[Embed, ...]
+
+
+@dataclass(frozen=True)
+class ImagePage:
+    """One message of an image reply (`formatting.image`): an embed showing the
+    PNG attached as `filename`."""
+
+    embed: Embed
+    filename: str
+    png: bytes = field(repr=False)
+
 
 DISCORD_LIMITS = Limits()
 

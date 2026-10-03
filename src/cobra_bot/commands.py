@@ -9,7 +9,7 @@ import json
 import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from cobra_bot import messages
 from cobra_bot.cobra.cache import TournamentCache
@@ -27,10 +27,11 @@ from cobra_bot.domain.rounds import (
     standings_view,
 )
 from cobra_bot.domain.search import search_players
-from cobra_bot.formatting.chunking import Message, chunk
-from cobra_bot.formatting.pairings import format_pairings
+from cobra_bot.formatting.chunking import ImagePage, Message, chunk
 from cobra_bot.formatting.players import format_player_cards
-from cobra_bot.formatting.standings import format_standings
+
+if TYPE_CHECKING:
+    from cobra_bot.formatting.image import Fonts
 
 log = logging.getLogger(__name__)
 
@@ -129,12 +130,22 @@ def _command(
 
 # --- execution (Worker) ---------------------------------------------------------
 
-type Reply = tuple[Message, ...] | str  # chunked messages, or one plain text reply
+
+@dataclass(frozen=True)
+class Images:
+    """A reply as image pages: pairings and standings (SPEC §9)."""
+
+    pages: tuple[ImagePage, ...]
 
 
-def execute(command: Command, cache: TournamentCache) -> Reply:
+# Chunked embed messages (player cards), image pages, or one plain text reply.
+type Reply = tuple[Message, ...] | Images | str
+
+
+def execute(command: Command, cache: TournamentCache, fonts: Fonts) -> Reply:
     """Run a command end to end and map every expected failure to a message
-    (FR-16). Unexpected exceptions propagate to the handler."""
+    (FR-16). Unexpected exceptions propagate to the handler. `fonts` draw the
+    images (`cobra_bot.fonts.load`)."""
     try:
         ref = parse_ref(command.tournament)
     except InvalidTournamentRef:
@@ -167,10 +178,14 @@ def execute(command: Command, cache: TournamentCache) -> Reply:
     except ValueError:  # invalid JSON or ParseError
         log.warning("unreadable export for tournament %s", tournament_id)
         return messages.COBRA_DATA_UNREADABLE
-    return _run(command, t, private=result.private)
+    return _run(command, t, fonts, private=result.private)
 
 
-def _run(command: Command, t: Tournament, *, private: bool) -> Reply:
+def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Reply:
+    # Imported here: it loads Pillow, which InteractionsFunction (it imports this
+    # module for parse_command) must not pay for within Discord's 3 s.
+    from cobra_bot.formatting import image
+
     match command.name:
         case "pairings":
             match pairings_view(t, command.round):
@@ -181,13 +196,17 @@ def _run(command: Command, t: Tournament, *, private: bool) -> Reply:
                 case TopCutNotSupported():
                     return messages.TOP_CUT_NOT_SUPPORTED
                 case PairingsView() as pairings:
-                    return chunk(format_pairings(t, pairings, private=private))
+                    return Images(
+                        image.pairings_images(t, pairings, fonts, private=private)
+                    )
         case "standings":
             match standings_view(t):
                 case NotStarted():
                     return messages.NOT_STARTED
                 case StandingsView() as standings:
-                    return chunk(format_standings(t, standings, private=private))
+                    return Images(
+                        image.standings_images(t, standings, fonts, private=private)
+                    )
         case "player":
             query = command.query or ""
             found = search_players(t.players, query)

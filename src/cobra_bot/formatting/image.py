@@ -1,33 +1,33 @@
-"""Layout C: the table as a PNG image in an embed.
+"""Standings and pairings as a PNG image in an embed (SPEC §9).
 
 Full colours on every client, real columns with headings, names and IDs not cut
 to code-block widths. The text cannot be selected or searched. The embed keeps
-format A's title link, header lines and a short legend; a long table is split
-into pages of at most `MAX_ROWS` rows, one message each.
+the title link and header lines of `format_standings` / `format_pairings` and a
+short legend; a long table is split into pages of at most `MAX_ROWS` rows, one
+message each, at most `MAX_MESSAGES`.
 
-Drawn with Pillow (a dev dependency: the bot does not ship it) in a system font
-that has Latin Extended glyphs (Pillow's built-in font has none of `Żółw`).
+Drawing is in memory and the fonts are injected (`cobra_bot.fonts.load`), so
+this module touches no files.
 """
 
 import io
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
 from cobra_bot import messages
-from cobra_bot.discord.api import Attachment
 from cobra_bot.domain.models import Pairing, Player, Seat, Tournament
 from cobra_bot.domain.rounds import PairingsView, StandingsView
+from cobra_bot.formatting.chunking import DISCORD_LIMITS, Embed, ImagePage
 from cobra_bot.formatting.document import EMBED_COLOR, Document
 from cobra_bot.formatting.pairings import format_pairings
 from cobra_bot.formatting.standings import format_standings
 from cobra_bot.formatting.text import code_text, fit, short_identity
 
 MAX_ROWS = 40  # per image
+MAX_MESSAGES = DISCORD_LIMITS.messages
 NAME_CHARS = 28
 ID_CHARS = 24
 
@@ -49,50 +49,14 @@ PADDING_X = 28
 PADDING_Y = 18
 COLUMN_GAP = 34
 
-_WINDOWS_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
-_DEJAVU = Path("/usr/share/fonts/truetype/dejavu")
-_MACOS_FONTS = Path("/System/Library/Fonts/Supplemental")
-# (regular, bold) font files to try, in order: Windows, Linux, macOS.
-FONT_CANDIDATES: tuple[tuple[Path, Path], ...] = (
-    (_WINDOWS_FONTS / "segoeui.ttf", _WINDOWS_FONTS / "segoeuib.ttf"),
-    (_DEJAVU / "DejaVuSans.ttf", _DEJAVU / "DejaVuSans-Bold.ttf"),
-    (_MACOS_FONTS / "Arial.ttf", _MACOS_FONTS / "Arial Bold.ttf"),
-)
-
 type Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
 type Align = Literal["left", "right"]
-
-
-class FontNotFound(Exception):
-    """No usable font file; pass one explicitly."""
 
 
 @dataclass(frozen=True)
 class Fonts:
     regular: Font
     bold: Font
-
-
-def load_fonts(
-    path: Path | None = None,
-    bold_path: Path | None = None,
-    candidates: Sequence[tuple[Path, Path]] = FONT_CANDIDATES,
-) -> Fonts:
-    """`path` (and `bold_path`, default: `path`), else the first pair in
-    `candidates` whose files both exist."""
-    if path is not None:
-        return Fonts(_truetype(path), _truetype(bold_path or path))
-    for regular, bold in candidates:
-        if regular.is_file() and bold.is_file():
-            return Fonts(_truetype(regular), _truetype(bold))
-    raise FontNotFound("no system font found; pass one with --font")
-
-
-def _truetype(path: Path) -> Font:
-    try:
-        return ImageFont.truetype(path, FONT_SIZE)
-    except OSError as err:
-        raise FontNotFound(f"cannot load font {path}") from err
 
 
 @dataclass(frozen=True)
@@ -139,7 +103,7 @@ def render_png(table: Table, fonts: Fonts) -> bytes:
             _draw_row(draw, fonts, table.columns, widths, row, y, ROW_HEIGHT)
             y += ROW_HEIGHT
     out = io.BytesIO()
-    image.save(out, format="PNG", optimize=True)
+    image.save(out, format="PNG")
     return out.getvalue()
 
 
@@ -371,64 +335,94 @@ def _total(seat: Seat) -> int | None:
 
 # --- messages ---------------------------------------------------------------
 
-type ImageMessage = tuple[dict[str, object], Attachment]
 
-
-def c_standings(
+def standings_images(
     t: Tournament, view: StandingsView, fonts: Fonts, *, private: bool = False
-) -> list[ImageMessage]:
+) -> tuple[ImagePage, ...]:
     doc = format_standings(t, view, private=private)
     footer = messages.compact_standings_footer(view.after_round, len(view.players))
-    return _messages(doc, standings_table(view), footer, fonts, "standings")
+    return image_pages(
+        doc, standings_table(view), footer, fonts, "standings", row_entries=True
+    )
 
 
-def c_pairings(
+def pairings_images(
     t: Tournament, view: PairingsView, fonts: Fonts, *, private: bool = False
-) -> list[ImageMessage]:
+) -> tuple[ImagePage, ...]:
     doc = format_pairings(t, view, private=private)
     footer = messages.compact_pairings_footer(view.round_number, len(view.pairings))
-    return _messages(doc, pairings_table(t, view), footer, fonts, "pairings")
+    return image_pages(
+        doc, pairings_table(t, view), footer, fonts, "pairings", row_entries=False
+    )
 
 
-def paginate_groups(groups: Sequence[Group], max_rows: int) -> list[tuple[Group, ...]]:
-    """Pages of whole groups, at most `max_rows` rows each (a larger group gets
-    a page of its own); always at least one page."""
+def paginate_groups(
+    groups: Sequence[Group], max_rows: int, *, split: bool
+) -> list[tuple[Group, ...]]:
+    """Pages of at most `max_rows` rows; always at least one page.
+
+    With `split`, every page is filled and a group may continue on the next
+    page (standings: a group is the players on equal points). Without it, a
+    group moves whole to the next page unless it alone is longer than a page
+    (pairings: a group is a table)."""
     pages: list[list[Group]] = [[]]
     rows = 0
     for group in groups:
-        if pages[-1] and rows + len(group) > max_rows:
-            pages.append([])
-            rows = 0
-        pages[-1].append(group)
-        rows += len(group)
+        rest = group
+        while rest:
+            room = max_rows - rows
+            if not split and len(rest) > room and pages[-1]:
+                room = 0
+            if room == 0:
+                pages.append([])
+                rows = 0
+                continue
+            piece, rest = rest[:room], rest[room:]
+            pages[-1].append(piece)
+            rows += len(piece)
     return [tuple(page) for page in pages]
 
 
-def _messages(
-    doc: Document, table: Table, footer: str, fonts: Fonts, name: str
-) -> list[ImageMessage]:
-    pages = paginate_groups(table.groups, MAX_ROWS)
-    out: list[ImageMessage] = []
-    for number, groups in enumerate(pages, start=1):
+def image_pages(
+    doc: Document,
+    table: Table,
+    footer: str,
+    fonts: Fonts,
+    name: str,
+    *,
+    row_entries: bool,
+) -> tuple[ImagePage, ...]:
+    """One message per page, at most `MAX_MESSAGES`. The first has the title,
+    link and header; every one has the legend, and the page number when there
+    are several. Pages past the limit are dropped and the last message says how
+    many entries are missing, with the Cobra link (FR-14). An entry is a row
+    with `row_entries` (a player; groups may then break across pages), else a
+    group (a table, kept whole)."""
+    pages = paginate_groups(table.groups, MAX_ROWS, split=row_entries)
+    kept = pages[:MAX_MESSAGES]
+    omitted = sum(
+        sum(len(g) for g in page) if row_entries else len(page)
+        for page in pages[MAX_MESSAGES:]
+    )
+    out = []
+    for number, groups in enumerate(kept, start=1):
+        first, last = number == 1, number == len(kept)
+        lines = [*doc.header, *doc.notes] if first else []
+        if last and omitted:
+            lines.append(messages.omitted_entries(omitted, doc.url))
         filename = f"{name}-{number}.png"
-        png = render_png(Table(table.columns, groups), fonts)
-        page_footer = (
-            f"{footer} · {messages.page_indicator(number, len(pages))}"
-            if len(pages) > 1
-            else footer
+        embed = Embed(
+            description="\n".join(lines),
+            title=doc.title if first else None,
+            url=doc.url if first else None,
+            footer=(
+                f"{footer} · {messages.page_indicator(number, len(kept))}"
+                if len(kept) > 1
+                else footer
+            ),
+            color=EMBED_COLOR,
+            image=filename,
         )
-        embed: dict[str, object] = {
-            "title": doc.title,
-            "url": doc.url,
-            "color": EMBED_COLOR,
-            "description": "\n".join([*doc.header, *doc.notes]),
-            "image": {"url": f"attachment://{filename}"},
-            "footer": {"text": page_footer},
-        }
-        payload: dict[str, object] = {
-            "embeds": [embed],
-            "allowed_mentions": {"parse": []},
-            "attachments": [{"id": 0, "filename": filename}],
-        }
-        out.append((payload, Attachment(filename, png, "image/png")))
-    return out
+        png = render_png(Table(table.columns, groups), fonts)
+        out.append(ImagePage(embed, filename, png))
+    return tuple(out)
