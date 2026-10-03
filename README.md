@@ -122,6 +122,7 @@ Developer Portal → **Installation** → copy the **Install Link**. Opening it 
 
 | Command | What it does |
 |---------|--------------|
+| `uv run scripts/aws_ops.py logs tail` / `logs 10m` | Shortcut for `sam logs` (and for `sam build` / `sam deploy`) that reads the stack name and region from `samconfig.local.toml`; see [`aws_ops.py`](#scriptsaws_opspy--build-deploy-and-read-logs-from-your-machine). |
 | `sam logs --stack-name cobra-bot --name WorkerFunction --tail` | Streams the Worker's logs (use `InteractionsFunction` for the endpoint). Add `--config-file samconfig.local.toml` to pick up the region. |
 | `sam delete --stack-name cobra-bot --config-file samconfig.local.toml` | Deletes the stack. CloudFormation cannot delete a bucket that still has objects. Cached objects expire within a day, or empty the bucket first with `aws s3 rm s3://<CacheBucketName> --recursive` (bucket name in the stack outputs). |
 
@@ -298,5 +299,36 @@ uv run scripts/register_commands.py
 What it does: one `PUT https://discord.com/api/v10/applications/{id}/commands` request. Global commands can take a while to appear in Discord clients.
 
 **Exit codes:** `0` registered, or payload printed with `--dry-run`; `1` request failed (network error or non-2xx; Discord's error message is printed); `2` invalid arguments or missing environment variables.
+
+### `scripts/aws_ops.py` — build, deploy and read logs from your machine
+
+Wraps the SAM CLI commands you run most often, so you don't have to type the stack name, region and config file each time. It uses only the standard library and runs from any directory; SAM always runs in the repository root.
+
+```bash
+uv run scripts/aws_ops.py build
+uv run scripts/aws_ops.py deploy [--config-env ENV]
+uv run scripts/aws_ops.py logs tail [--function worker|interactions|all] [--config-env ENV] [--stack-name NAME]
+uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--stack-name NAME]
+```
+
+| Command | Runs |
+|---------|------|
+| `build` | `sam build`. Needs `python3.14` on `PATH`, as above. Writes `.aws-sam/build/`. |
+| `deploy` | `sam deploy --config-file samconfig.local.toml --config-env ENV`. Deploys the last `build`, so run `build` first. SAM shows the change set and asks before applying it. |
+| `logs tail` | `sam logs --stack-name … --region … --tail`: streams new log lines until Ctrl+C. |
+| `logs WINDOW` | `sam logs --stack-name … --region … --start-time "<WINDOW> ago"`: prints the log lines of the last `WINDOW` and exits. `WINDOW` is a whole number followed by `s`, `m`, `h` or `d`, e.g. `30s`, `10m`, `2h`, `1d`; it defaults to `10m`. |
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--config-env ENV` | `default` | Which section of `samconfig.local.toml` to use (`deploy`, `logs`). |
+| `--function` | `all` | `logs` only: `worker` (`WorkerFunction`), `interactions` (`InteractionsFunction`) or `all` (every function in the stack). |
+| `--stack-name NAME` | `stack_name` from the config | `logs` only: read another stack's logs. |
+| anything else | — | Passed on to `sam` unchanged, e.g. `build --use-container` or `deploy --no-confirm-changeset`. |
+
+**What it reads:** `samconfig.local.toml` in the repository root, written by the first `sam deploy --guided` ([step 3](#3-deploy-the-stack)). `deploy` and `logs` need it; `build` does not. `logs` takes `stack_name` and `region` from `[ENV.deploy.parameters]`, with the region falling back to `[ENV.global.parameters]`; without a region, SAM uses `eu-central-1` from `samconfig.toml`. AWS credentials come from your usual AWS CLI profile (`AWS_PROFILE` etc.).
+
+**Which `sam`:** `sam` from `PATH` if installed, otherwise `uvx --from aws-sam-cli==1.166.2 sam`, the version CI uses (a test keeps them in step). It prints the command it runs to stderr before running it.
+
+**Exit codes:** SAM's own exit code (`0` on success); `0` when Ctrl+C stops `logs tail`; `130` when Ctrl+C stops any other command; `2` invalid arguments, a bad `WINDOW`, neither `sam` nor `uvx` on `PATH`, or `samconfig.local.toml` missing, not valid TOML, without the chosen `--config-env`, or (for `logs`) without a stack name.
 
 > **Running from the Claude desktop app on Windows:** the app is an MSIX package, so writes to `%APPDATA%\uv` are virtualised, and uv's Python install fails with `os error 17`. If you hit this, set `UV_PYTHON_INSTALL_DIR` to a directory outside `%APPDATA%`. uv run from a normal terminal is not affected.
