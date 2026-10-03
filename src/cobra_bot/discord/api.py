@@ -11,6 +11,7 @@
 import json
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 import httpx
 
@@ -23,13 +24,29 @@ TIMEOUT_S = 10.0
 EPHEMERAL = 1 << 6  # message flag 64
 MAX_RATE_LIMIT_RETRIES = 3
 MAX_RETRY_AFTER_S = 10.0
+DETAIL_CHARS = 300  # of Discord's error body kept in DiscordError.detail
 
 type Sleep = Callable[[float], None]
 type Payload = dict[str, object]
 
 
 class DiscordError(Exception):
-    """A webhook request failed; the message says how, never with the token."""
+    """A webhook request failed; the message says how, never with the token.
+
+    `detail`: the start of Discord's error body (it says which field it
+    rejected), kept out of the message so it is not logged by default.
+    """
+
+    def __init__(self, message: str, *, detail: str = "") -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
+@dataclass(frozen=True)
+class Attachment:
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
 
 
 def make_http_client() -> httpx.Client:
@@ -102,22 +119,56 @@ class WebhookClient:
     def edit_original(self, token: str, payload: Payload) -> None:
         self._request("PATCH", f"{self._webhook(token)}/messages/@original", payload)
 
-    def follow_up(self, token: str, payload: Payload) -> None:
-        self._request("POST", self._webhook(token), payload)
+    def follow_up(
+        self,
+        token: str,
+        payload: Payload,
+        *,
+        files: Sequence[Attachment] = (),
+        with_components: bool = False,
+    ) -> None:
+        """`files` are sent as `files[n]` next to the payload (multipart);
+        `with_components` lets a channel webhook post Components V2."""
+        params = {"with_components": "true"} if with_components else None
+        self._request("POST", self._webhook(token), payload, files, params)
 
     def _webhook(self, token: str) -> str:
         return f"{self._base_url}/webhooks/{self._application_id}/{token}"
 
-    def _request(self, method: str, url: str, payload: Payload) -> None:
+    def _request(
+        self,
+        method: str,
+        url: str,
+        payload: Payload,
+        files: Sequence[Attachment] = (),
+        params: dict[str, str] | None = None,
+    ) -> None:
         for _ in range(MAX_RATE_LIMIT_RETRIES + 1):
             try:
-                response = self._http.request(method, url, json=payload)
+                if files:
+                    response = self._http.request(
+                        method,
+                        url,
+                        params=params,
+                        data={"payload_json": json.dumps(payload)},
+                        files=[
+                            (f"files[{n}]", (a.filename, a.content, a.content_type))
+                            for n, a in enumerate(files)
+                        ],
+                    )
+                else:
+                    response = self._http.request(
+                        method, url, params=params, json=payload
+                    )
             except httpx.HTTPError as err:
                 raise DiscordError(f"{method} failed: {type(err).__name__}") from None
             if response.status_code != 429:
                 if response.is_success:
                     return
-                raise DiscordError(f"{method} failed: HTTP {response.status_code}")
+                raise DiscordError(
+                    f"{method} failed: HTTP {response.status_code}",
+                    detail=response.text[:DETAIL_CHARS],
+                )
             delay = _retry_after(response)
             if delay is None or delay > MAX_RETRY_AFTER_S:
                 raise DiscordError(f"{method} rate limited for too long")

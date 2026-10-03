@@ -120,6 +120,49 @@ def tournament_fallback_name(tournament_id: int) -> str:
     return f"Tournament {tournament_id}"
 
 
+# --- layouts under test (cobra_bot.preview; not used by the bot yet) -------------
+
+PREVIOUS_PAGE = "Prev"
+NEXT_PAGE = "Next"
+REFRESH = "Refresh"
+ROUND_PLACEHOLDER = "Choose a round"
+SOS = "SoS"
+TOTAL = "Total"
+PLAYER = "Player"
+TABLE = "Table"
+POINTS = "Pts"
+RANK = "#"
+SIDE = "Side"
+IDENTITY = "ID"
+
+
+def page_indicator(page: int, pages: int) -> str:
+    return f"{page} / {pages}"
+
+
+def round_option(round_number: int) -> str:
+    return f"Round {round_number}"
+
+
+def game_label(game: int) -> str:
+    """Short label of a double-sided game: `G1`."""
+    return f"G{game}"
+
+
+def game_heading(game: int) -> str:
+    return f"Game {game}"
+
+
+def compact_standings_footer(after_round: int | None, players: int) -> str:
+    parts = [f"Round {after_round}"] if after_round else []
+    return " · ".join([*parts, _count(players, "player")])
+
+
+def compact_pairings_footer(round_number: int, tables: int, double_sided: bool) -> str:
+    footer = f"Round {round_number} · {_count(tables, 'table')}"
+    return f"{footer} · G1 = game 1, G2 = game 2" if double_sided else footer
+
+
 # --- command registration (SPEC §2) --------------------------------------------
 
 COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
