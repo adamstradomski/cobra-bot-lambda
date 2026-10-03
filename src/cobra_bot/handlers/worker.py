@@ -23,6 +23,7 @@ from cobra_bot.discord import api as discord
 from cobra_bot.discord.api import DiscordError, WebhookClient
 from cobra_bot.formatting.image import Fonts
 from cobra_bot.handlers.logging_setup import configure_logging
+from cobra_bot.image_cache import ImageCache
 
 log = logging.getLogger(__name__)
 
@@ -34,11 +35,16 @@ type WebhookFactory = Callable[[str], WebhookClient]  # application ID -> client
 
 class WorkerApp:
     def __init__(
-        self, cache: TournamentCache, webhooks: WebhookFactory, fonts: Fonts
+        self,
+        cache: TournamentCache,
+        webhooks: WebhookFactory,
+        fonts: Fonts,
+        images: ImageCache | None = None,
     ) -> None:
         self._cache = cache
         self._webhooks = webhooks
         self._fonts = fonts
+        self._images = images
 
     def handle(self, event: Event) -> None:
         try:
@@ -47,11 +53,13 @@ class WorkerApp:
             log.error("malformed job; nothing to reply to")
             return
         started = time.monotonic()
+        before = (self._images.hits, self._images.misses) if self._images else (0, 0)
         try:
-            reply = execute(job.command, self._cache, self._fonts)
+            reply = execute(job.command, self._cache, self._fonts, self._images)
         except Exception:
             log.exception("command %s failed", job.command.name)
             reply = messages.INTERNAL_ERROR
+        prepared = time.monotonic()
         webhook = self._webhooks(job.application_id)
         try:
             if isinstance(reply, str):
@@ -61,12 +69,30 @@ class WorkerApp:
             else:
                 webhook.send(job.token, reply)
         except DiscordError as err:
-            log.error("reply to %s not delivered: %s", job.command.name, err)
+            # Discord's short error body names the cause (e.g. Unknown Message);
+            # it never holds the token, which is only in the URL.
+            log.error(
+                "reply to %s not delivered: %s %s",
+                job.command.name,
+                err,
+                err.detail,
+            )
             return
+        hits, misses = (
+            (self._images.hits - before[0], self._images.misses - before[1])
+            if self._images
+            else (0, 0)
+        )
+        finished = time.monotonic()
         log.info(
-            "command=%s done in %.0f ms",
+            "command=%s done in %.0f ms (reply %.0f ms, send %.0f ms) "
+            "images cached=%d drawn=%d",
             job.command.name,
-            (time.monotonic() - started) * 1000,
+            (finished - started) * 1000,
+            (prepared - started) * 1000,
+            (finished - prepared) * 1000,
+            hits,
+            misses,
         )
 
 
@@ -88,7 +114,10 @@ def _app_from_environment() -> WorkerApp:  # pragma: no cover - needs AWS
     )
     discord_http = discord.make_http_client()
     return WorkerApp(
-        cache, lambda app_id: WebhookClient(discord_http, app_id), fonts.load()
+        cache,
+        lambda app_id: WebhookClient(discord_http, app_id),
+        fonts.load(),
+        ImageCache(store, clock=utc_now),  # same bucket, own prefix and TTL
     )
 
 

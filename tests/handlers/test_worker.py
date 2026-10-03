@@ -16,6 +16,7 @@ from cobra_bot.commands import Command, Job
 from cobra_bot.discord.api import WebhookClient
 from cobra_bot.formatting import image
 from cobra_bot.handlers.worker import WorkerApp
+from cobra_bot.image_cache import ImageCache
 
 COBRA = "https://tournaments.nullsignal.games"
 WEBHOOK = "https://discord.com/api/v10/webhooks/app-1/tok-1"
@@ -58,15 +59,19 @@ def _payload(request: httpx.Request) -> dict[str, object]:
     return payload
 
 
-def _worker(discord: Discord, fetcher: Fetcher | None = None) -> WorkerApp:
+def _worker(
+    discord: Discord, fetcher: Fetcher | None = None, *, images: bool = True
+) -> WorkerApp:
     cobra = CobraClient(httpx.Client(transport=httpx.MockTransport(_cobra)))
-    cache = TournamentCache(
-        InMemoryCacheStore(),
-        fetcher or cobra,
-        clock=lambda: FETCHED_AT,
-    )
+    store = InMemoryCacheStore()
+    cache = TournamentCache(store, fetcher or cobra, clock=lambda: FETCHED_AT)
     discord_http = httpx.Client(transport=httpx.MockTransport(discord))
-    return WorkerApp(cache, lambda app_id: WebhookClient(discord_http, app_id), FONTS)
+    return WorkerApp(
+        cache,
+        lambda app_id: WebhookClient(discord_http, app_id),
+        FONTS,
+        ImageCache(store, clock=lambda: FETCHED_AT) if images else None,
+    )
 
 
 def _job(command: Command) -> dict[str, object]:
@@ -172,3 +177,44 @@ def test_malformed_job_sends_nothing(caplog: pytest.LogCaptureFixture) -> None:
 
     assert discord.requests == []
     assert "malformed job" in caplog.text
+
+
+def test_repeated_reply_reuses_the_images(caplog: pytest.LogCaptureFixture) -> None:
+    worker = _worker(Discord())
+
+    with caplog.at_level(logging.INFO):
+        worker.handle(_job(Command("pairings", "5018")))
+        worker.handle(_job(Command("pairings", "5018")))
+
+    done = [r.getMessage() for r in caplog.records if "done in" in r.getMessage()]
+    assert [line.split(" images ")[1] for line in done] == [
+        "cached=0 drawn=1",
+        "cached=1 drawn=0",
+    ]
+
+
+def test_without_an_image_cache_every_image_is_drawn(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    worker = _worker(Discord(), images=False)
+
+    with caplog.at_level(logging.INFO):
+        worker.handle(_job(Command("pairings", "5018")))
+
+    assert "images cached=0 drawn=0" in caplog.text  # not counted without a cache
+
+
+def test_discord_failure_logs_discords_reason(caplog: pytest.LogCaptureFixture) -> None:
+    class Unknown(Discord):
+        def __call__(self, request: httpx.Request) -> httpx.Response:
+            self.requests.append(request)
+            return httpx.Response(
+                404, json={"message": "Unknown Message", "code": 10008}
+            )
+
+    with caplog.at_level(logging.ERROR):
+        _worker(Unknown()).handle(_job(Command("standings", "4909")))
+
+    assert "PATCH failed: HTTP 404" in caplog.text
+    assert "Unknown Message" in caplog.text
+    assert "tok-1" not in caplog.text
