@@ -17,6 +17,7 @@ from cobra_bot.domain.rounds import (
     is_pairing_complete,
     name_order,
     pairings_view,
+    ranked_players,
     standings_view,
 )
 
@@ -293,3 +294,22 @@ def test_started_tournament_is_marked_started(raw_fixture: LoadRaw) -> None:
 def test_name_order_matches_cobra(cobra_order: list[str]) -> None:
     """Pairs as Cobra lists them (World Championship 2026, before round 1)."""
     assert sorted(cobra_order[::-1], key=name_order) == cobra_order
+
+
+def test_ranked_players_before_the_first_round_are_numbered_by_name() -> None:
+    t = _registered("Zed", "amy", "Bob")  # export ranks: Zed 3, amy 2, Bob 1
+
+    assert [(p.name, p.rank) for p in ranked_players(t)] == [
+        ("amy", 1),
+        ("Bob", 2),
+        ("Zed", 3),
+    ]
+
+
+def test_ranked_players_after_pairing_keep_cobras_rank(raw_fixture: LoadRaw) -> None:
+    t = _fixture(raw_fixture, "dss")
+
+    ranked = ranked_players(t)
+
+    assert [p.rank for p in ranked] == sorted(p.rank for p in t.players)
+    assert set(ranked) == set(t.players)  # unchanged players
