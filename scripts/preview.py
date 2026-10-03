@@ -8,7 +8,7 @@ from a local Cobra export, to check the layout without building or deploying.
 
 Format A, the default, is the bot's reply: it goes through the same code as the
 Worker (`commands.execute`, the cache, the parser, the formatters,
-`message_payload`), so the embeds are the production ones. Formats B1, B2 and C
+`message_payload`), so the embeds are the production ones. Formats B2 and C
 are layouts under test (`cobra_bot.preview`) for the same data. Cobra is never
 contacted. Messages are posted through a channel webhook
 (`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the project environment. See README.md
@@ -43,11 +43,6 @@ from cobra_bot.domain.rounds import (
     standings_view,
     swiss_round_numbers,
 )
-from cobra_bot.domain.search import search_players
-from cobra_bot.formatting.document import Document
-from cobra_bot.formatting.pairings import format_pairings
-from cobra_bot.formatting.players import format_player_cards
-from cobra_bot.formatting.standings import format_standings
 from cobra_bot.formatting.text import tournament_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -58,9 +53,9 @@ DEFAULT_TOURNAMENT_ID = 1
 # Age of the cached copy for --stale / --private: past the TTL, so the cache
 # asks Cobra (the fake below) and serves the copy marked stale.
 STALE_AGE = timedelta(minutes=10)
-FORMATS = ("a", "b1", "b2", "c")
+FORMATS = ("a", "b2", "c")
 LINK_BUTTON = 5  # button style
-BUTTONS_PER_ROW = 5
+SELECT_ARROW = "▾"  # marks the link button that stands in for a select
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -198,7 +193,7 @@ def build_posts(
 def _variant_pages(
     command: Command, t: Tournament, private: bool, options: Options
 ) -> list[Post]:
-    from cobra_bot.preview import components  # only for B1, B2
+    from cobra_bot.preview import components  # only for B2
 
     view = (
         pairings_view(t, command.round)
@@ -218,8 +213,6 @@ def _variant_pages(
         return [Post(p, components=True) for p in payloads]
 
     match options.format:
-        case "b1":
-            return v2(components.b1_pages(_document(command, t, view, private), nav))
         case "b2" if isinstance(view, StandingsView):
             return v2(components.b2_standings(t, view, private=private))
         case "b2" if isinstance(view, PairingsView):
@@ -240,69 +233,46 @@ def _variant_pages(
     raise UsageError(f"--format {options.format} supports pairings and standings.")
 
 
-def _document(
-    command: Command,
-    t: Tournament,
-    view: object,
-    private: bool,
-) -> Document:
-    if isinstance(view, PairingsView):
-        return format_pairings(t, view, private=private)
-    if isinstance(view, StandingsView):
-        return format_standings(t, view, private=private)
-    query = command.query or ""
-    return format_player_cards(
-        t, search_players(t.players, query), query, private=private
-    )
-
-
 def link_mockup(payload: Payload, url: str) -> Payload:
     """Channel webhooks may post only non-interactive components, so every
-    button becomes a link button with the same label, and the round select a
-    row of link buttons, one per option, the selected one disabled. All links
-    go to `url`."""
+    button becomes a link button with the same label, and the round select one
+    link button showing the selected round (`Round 8 ▾`). Both keep the
+    component count of the real message, which Discord caps at 40. All links go
+    to `url`."""
 
     def convert(components: object) -> list[object]:
         out: list[object] = []
         for item in components if isinstance(components, list) else []:
             if not isinstance(item, dict):
                 out.append(item)
-                continue
-            children = item.get("components")
-            selects = [
-                c for c in children or [] if isinstance(c, dict) and "options" in c
-            ]
-            if selects:
-                out.extend(_option_rows(selects[0], url))
-                continue
-            if "custom_id" in item:
-                item = {k: v for k, v in item.items() if k != "custom_id"}
-                item.update(style=LINK_BUTTON, url=url)
-            elif children is not None:
-                item = {**item, "components": convert(children)}
-            out.append(item)
+            elif "options" in item:
+                out.append(_select_button(item, url))
+            elif "custom_id" in item:
+                button = {k: v for k, v in item.items() if k != "custom_id"}
+                out.append({**button, "style": LINK_BUTTON, "url": url})
+            elif "components" in item:
+                out.append({**item, "components": convert(item["components"])})
+            else:
+                out.append(item)
         return out
 
     return {**payload, "components": convert(payload.get("components"))}
 
 
-def _option_rows(select: Component, url: str) -> list[object]:
+def _select_button(select: Component, url: str) -> Component:
     options = select.get("options")
-    buttons: list[Component] = [
-        {
-            "type": 2,
-            "style": LINK_BUTTON,
-            "label": option.get("label"),
-            "url": url,
-            "disabled": bool(option.get("default")),
-        }
-        for option in (options if isinstance(options, list) else [])
-        if isinstance(option, dict)
+    chosen = [
+        o
+        for o in (options if isinstance(options, list) else [])
+        if isinstance(o, dict) and o.get("default")
     ]
-    return [
-        {"type": 1, "components": buttons[i : i + BUTTONS_PER_ROW]}
-        for i in range(0, len(buttons), BUTTONS_PER_ROW)
-    ]
+    label = chosen[0].get("label") if chosen else select.get("placeholder")
+    return {
+        "type": 2,
+        "style": LINK_BUTTON,
+        "label": f"{label} {SELECT_ARROW}",
+        "url": url,
+    }
 
 
 def webhook_target(env: Mapping[str, str]) -> tuple[str, str]:
@@ -361,25 +331,24 @@ def _parser() -> argparse.ArgumentParser:
         "--format",
         choices=FORMATS,
         default="a",
-        help="a: the bot's embeds (default); b1, b2, c: layouts under test",
+        help="a: the bot's embeds (default); b2, c: layouts under test",
     )
     pages = common.add_mutually_exclusive_group()
     pages.add_argument(
-        "--page", type=_positive, default=1, help="b1, b2, c: page to post (default 1)"
+        "--page", type=_positive, default=1, help="b2, c: page to post (default 1)"
     )
     pages.add_argument(
         "--all-pages",
         dest="page",
         action="store_const",
         const=None,
-        help="b1, b2, c: post every page",
+        help="b2, c: post every page",
     )
     common.add_argument(
         "--no-mockup",
         dest="mockup",
         action="store_false",
-        help="b1, b2: keep the real buttons and select (a channel webhook rejects "
-        "them)",
+        help="b2: keep the real buttons and select (a channel webhook rejects them)",
     )
     common.add_argument("--font", type=Path, help="c: TrueType font file")
     common.add_argument(

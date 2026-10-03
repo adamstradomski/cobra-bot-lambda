@@ -55,7 +55,7 @@ PLAYERS = (
 # --- standings ----------------------------------------------------------------------
 
 
-def test_standings_columns() -> None:
+def test_standings_columns_ids_before_points_and_sos() -> None:
     t = tournament(
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
     )
@@ -65,10 +65,10 @@ def test_standings_columns() -> None:
     assert [(col.heading, col.align) for col in table.columns] == [
         (messages.RANK, "right"),
         (messages.PLAYER, "left"),
-        (messages.POINTS, "right"),
-        (messages.SOS, "right"),
         (messages.CORP, "left"),
         (messages.RUNNER, "left"),
+        (messages.POINTS, "right"),
+        (messages.SOS, "right"),
     ]
 
 
@@ -77,7 +77,7 @@ def test_standings_row_values_and_colours() -> None:
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
     )
 
-    rank, name, points, sos, corp, runner = c.standings_table(_standings(t)).groups[0][
+    rank, name, corp, runner, points, sos = c.standings_table(_standings(t)).groups[0][
         0
     ]
 
@@ -107,7 +107,7 @@ def test_long_names_and_ids_are_cut_and_made_safe() -> None:
     p = player(1, "A" * 40 + "\x1b[31m", corp="X" * 40)
     t = tournament((pairing(1, seat(1, "corp", 3), seat(None)),), players=(p,))
 
-    _, name, _, _, corp, _ = c.standings_table(_standings(t)).groups[0][0]
+    _, name, corp, _, _, _ = c.standings_table(_standings(t)).groups[0][0]
 
     assert name.text == "A" * (c.NAME_CHARS - 1) + "…"
     assert corp.text == "X" * (c.ID_CHARS - 1) + "…"
