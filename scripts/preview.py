@@ -128,8 +128,7 @@ def offline_cache(
 
 
 def posts(reply: Reply) -> list[Post]:
-    """The messages the Worker would send. Channel webhooks cannot post
-    ephemeral messages, so none carries the ephemeral flag."""
+    """The messages the Worker would send."""
     if isinstance(reply, str):
         return [Post(discord.text_payload(reply))]
     if isinstance(reply, Images):
@@ -260,8 +259,6 @@ def main(
         return EXIT_OK
 
     webhook_id, token = target
-    if command.ephemeral:
-        print("preview: posted publicly; the bot replies privately", file=sys.stderr)
     started = time.monotonic()
     client = http or discord.make_http_client()
     try:

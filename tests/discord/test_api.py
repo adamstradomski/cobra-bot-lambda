@@ -7,7 +7,6 @@ import pytest
 from builders import pairing, player, seat, tournament
 from cobra_bot.discord.api import (
     DETAIL_CHARS,
-    EPHEMERAL,
     USER_AGENT,
     Attachment,
     DiscordError,
@@ -79,7 +78,7 @@ def test_ac21_every_payload_blocks_mentions_and_names_stay_in_code_blocks() -> N
     for doc in documents:
         messages = chunk(doc)
         assert len(messages) > 1  # follow-ups are covered too
-        client.send(TOKEN, messages, ephemeral=False)
+        client.send(TOKEN, messages)
 
     payloads = recorder.payloads()
     assert payloads
@@ -105,9 +104,7 @@ def test_ac21_every_payload_blocks_mentions_and_names_stay_in_code_blocks() -> N
 def test_first_message_edits_original_rest_are_follow_ups() -> None:
     recorder = Recorder()
 
-    recorder.client().send(
-        TOKEN, [_message("a"), _message("b"), _message("c")], ephemeral=False
-    )
+    recorder.client().send(TOKEN, [_message("a"), _message("b"), _message("c")])
 
     assert [(r.method, str(r.url)) for r in recorder.requests] == [
         ("PATCH", f"{WEBHOOK}/messages/@original"),
@@ -121,14 +118,12 @@ def test_first_message_edits_original_rest_are_follow_ups() -> None:
     ]
 
 
-def test_ephemeral_follow_ups_carry_the_flag() -> None:
+def test_follow_ups_are_public() -> None:
     recorder = Recorder()
 
-    recorder.client().send(TOKEN, [_message("a"), _message("b")], ephemeral=True)
+    recorder.client().send(TOKEN, [_message("a"), _message("b")])
 
-    first, second = recorder.payloads()
-    assert "flags" not in first  # the deferred response already is ephemeral
-    assert second["flags"] == EPHEMERAL == 64
+    assert all("flags" not in p for p in recorder.payloads())
 
 
 def test_embed_title_and_url() -> None:
@@ -139,7 +134,7 @@ def test_embed_title_and_url() -> None:
         url="https://tournaments.nullsignal.games/tournaments/1",
     )
 
-    recorder.client().send(TOKEN, [(embed,)], ephemeral=False)
+    recorder.client().send(TOKEN, [(embed,)])
 
     assert recorder.payloads()[0]["embeds"] == [
         {
@@ -154,7 +149,7 @@ def test_embed_colour_fields_and_footer() -> None:
     recorder = Recorder()
     embed = Embed(description="d", fields=("f1", "f2"), footer="legend", color=0xE0B23A)
 
-    recorder.client().send(TOKEN, [(embed,)], ephemeral=False)
+    recorder.client().send(TOKEN, [(embed,)])
 
     assert recorder.payloads()[0]["embeds"] == [
         {
@@ -348,13 +343,12 @@ def test_image_payload_declares_the_attachment() -> None:
     assert payload["attachments"] == [{"id": 0, "filename": "p-1.png"}]
     assert payload["allowed_mentions"] == {"parse": []}
     assert "flags" not in payload
-    assert image_payload(_page(1), ephemeral=True)["flags"] == EPHEMERAL
 
 
 def test_image_pages_edit_the_original_then_follow_up_with_files() -> None:
     recorder = Recorder()
 
-    recorder.client().send_images(TOKEN, [_page(1, "head"), _page(2)], ephemeral=True)
+    recorder.client().send_images(TOKEN, [_page(1, "head"), _page(2)])
 
     first, second = recorder.requests
     assert (first.method, str(first.url)) == ("PATCH", f"{WEBHOOK}/messages/@original")
@@ -363,15 +357,13 @@ def test_image_pages_edit_the_original_then_follow_up_with_files() -> None:
         assert request.headers["Content-Type"].startswith("multipart/form-data")
         assert f'name="files[0]"; filename="p-{n}.png"'.encode() in request.content
         assert b"\x89PNG-" + bytes([48 + n]) in request.content
-    # The deferral already carries the ephemeral flag; follow-ups need it.
-    assert b'"flags"' not in first.content
-    assert f'"flags": {EPHEMERAL}'.encode() in second.content
+    assert b'"flags"' not in first.content + second.content  # public
 
 
 def test_image_reply_failure_does_not_leak_the_token() -> None:
     recorder = Recorder(httpx.Response(413))
 
     with pytest.raises(DiscordError) as excinfo:
-        recorder.client().send_images(TOKEN, [_page(1)], ephemeral=False)
+        recorder.client().send_images(TOKEN, [_page(1)])
     assert str(excinfo.value) == "PATCH failed: HTTP 413"
     assert TOKEN not in str(excinfo.value)

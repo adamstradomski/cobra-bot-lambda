@@ -21,7 +21,6 @@ from cobra_bot.formatting.document import EMBED_COLOR
 DISCORD_API = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (https://github.com/adamstradomski/cobra-bot-lambda, 0.1)"
 TIMEOUT_S = 10.0
-EPHEMERAL = 1 << 6  # message flag 64
 MAX_RATE_LIMIT_RETRIES = 3
 MAX_RETRY_AFTER_S = 10.0
 DETAIL_CHARS = 300  # of Discord's error body kept in DiscordError.detail
@@ -77,19 +76,16 @@ def embed_payload(embed: Embed) -> Payload:
     return payload
 
 
-def message_payload(embeds: Sequence[Embed], *, ephemeral: bool = False) -> Payload:
-    payload: Payload = {
+def message_payload(embeds: Sequence[Embed]) -> Payload:
+    return {
         "embeds": [embed_payload(e) for e in embeds],
         "allowed_mentions": {"parse": []},
     }
-    if ephemeral:
-        payload["flags"] = EPHEMERAL
-    return payload
 
 
-def image_payload(page: ImagePage, *, ephemeral: bool = False) -> Payload:
+def image_payload(page: ImagePage) -> Payload:
     """The embed of an image page, with its PNG declared as attachment 0."""
-    payload = message_payload([page.embed], ephemeral=ephemeral)
+    payload = message_payload([page.embed])
     payload["attachments"] = [{"id": 0, "filename": page.filename}]
     return payload
 
@@ -117,29 +113,23 @@ class WebhookClient:
         self._sleep = sleep
         self._base_url = base_url.rstrip("/")
 
-    def send(self, token: str, messages: Sequence[Message], *, ephemeral: bool) -> None:
+    def send(self, token: str, messages: Sequence[Message]) -> None:
         """First message edits the deferred response; the rest are follow-ups.
-
-        The deferred response already carries the ephemeral flag; follow-ups need
-        it set explicitly.
-        """
+        Every reply is public."""
         for index, message in enumerate(messages):
             if index == 0:
                 self.edit_original(token, message_payload(message))
             else:
-                self.follow_up(token, message_payload(message, ephemeral=ephemeral))
+                self.follow_up(token, message_payload(message))
 
-    def send_images(
-        self, token: str, pages: Sequence[ImagePage], *, ephemeral: bool
-    ) -> None:
+    def send_images(self, token: str, pages: Sequence[ImagePage]) -> None:
         """Like `send`, one page per message, each with its PNG attached."""
         for index, page in enumerate(pages):
             files = (image_file(page),)
             if index == 0:
                 self.edit_original(token, image_payload(page), files=files)
             else:
-                payload = image_payload(page, ephemeral=ephemeral)
-                self.follow_up(token, payload, files=files)
+                self.follow_up(token, image_payload(page), files=files)
 
     def send_text(self, token: str, text: str) -> None:
         """`text_payload` in place of the deferral."""

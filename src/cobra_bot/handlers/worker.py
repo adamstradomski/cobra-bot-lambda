@@ -57,11 +57,9 @@ class WorkerApp:
             if isinstance(reply, str):
                 webhook.send_text(job.token, reply)
             elif isinstance(reply, Images):
-                webhook.send_images(
-                    job.token, reply.pages, ephemeral=job.command.ephemeral
-                )
+                webhook.send_images(job.token, reply.pages)
             else:
-                webhook.send(job.token, reply, ephemeral=job.command.ephemeral)
+                webhook.send(job.token, reply)
         except DiscordError as err:
             log.error("reply to %s not delivered: %s", job.command.name, err)
             return

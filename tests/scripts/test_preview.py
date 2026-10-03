@@ -109,10 +109,7 @@ def test_dry_run_matches_what_the_worker_sends(
     )
     worker.handle(Job("app", "tok", command).to_payload())
 
-    sent = [_payload(r) for r in seen]
-    if command.ephemeral:  # the Worker's follow-ups carry the flag; webhooks cannot
-        sent = [{k: v for k, v in p.items() if k != "flags"} for p in sent]
-    assert previewed == sent
+    assert previewed == [_payload(r) for r in seen]
 
 
 def test_pairings_round_option_is_passed_on(
@@ -321,16 +318,6 @@ def test_posts_every_payload_to_the_webhook(
     ] * len(expected)
     assert [_payload(r) for r in seen] == expected
     assert WEBHOOK_TOKEN not in capsys.readouterr().err
-
-
-def test_player_warns_that_the_preview_is_public(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    http, _ = _http()
-
-    assert preview_script.main([DSS, "player", "Player"], env=ENV, http=http) == 0
-
-    assert "replies privately" in capsys.readouterr().err
 
 
 def test_failed_post_exits_1_without_the_token(

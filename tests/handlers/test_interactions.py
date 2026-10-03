@@ -113,13 +113,13 @@ def test_ac19_ping_is_pong() -> None:
     assert _json(response) == {"type": 1}
 
 
-def test_ac19_player_is_deferred_ephemeral_and_worker_invoked_async() -> None:
+def test_ac19_player_is_deferred_publicly_and_worker_invoked_async() -> None:
     app, fake = _app()
 
     response = app.handle(_event(_command("player", tournament="4909", query="ali")))
 
     assert response["statusCode"] == 200
-    assert _json(response) == {"type": 5, "data": {"flags": 64}}
+    assert _json(response) == {"type": 5}  # public, like every reply
     (call,) = fake.calls
     assert (call["FunctionName"], call["InvocationType"]) == (WORKER, "Event")
     job = Job.from_payload(json.loads(call["Payload"]))

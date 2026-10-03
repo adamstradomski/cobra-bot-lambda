@@ -8,7 +8,7 @@ note is added while a top cut is in progress.
 from cobra_bot import messages
 from cobra_bot.domain.models import Player, Tournament
 from cobra_bot.domain.rounds import swiss_round_numbers, top_cut_in_progress
-from cobra_bot.domain.search import SearchResult
+from cobra_bot.domain.search import MAX_NAMES, NamesResult
 from cobra_bot.formatting import ansi
 from cobra_bot.formatting.ansi import RESET
 from cobra_bot.formatting.document import (
@@ -24,17 +24,13 @@ from cobra_bot.formatting.text import escape_markdown, tournament_url
 
 
 def format_player_cards(
-    t: Tournament, result: SearchResult, query: str, *, private: bool = False
+    t: Tournament, result: NamesResult, query: str, *, private: bool = False
 ) -> Document:
     header = [heading(messages.players_header(escape_markdown(query)))]
     if top_cut_in_progress(t):
         header.append(subtext(messages.TOP_CUT_IN_PROGRESS))
     header.append(data_line(t, private=private))
-    notes = []
-    if not result.matches:
-        notes.append(messages.NO_PLAYERS_MATCH)
-    if result.more:
-        notes.append(messages.more_players_matched(result.more))
+    notes = _notes(result)
     return Document(
         title=t.name,
         url=tournament_url(t.id),
@@ -43,6 +39,27 @@ def format_player_cards(
         notes=tuple(notes),
         footer=messages.PLAYERS_FOOTER,
     )
+
+
+def _notes(result: NamesResult) -> list[str]:
+    """One name: as before. Several: a note per name that matched nobody or
+    more players than shown, naming it."""
+    if len(result.names) <= 1:
+        notes = [] if result.matches else [messages.NO_PLAYERS_MATCH]
+        more = result.names[0].more if result.names else 0
+        if more:
+            notes.append(messages.more_players_matched(more))
+    else:
+        notes = []
+        for name in result.names:
+            shown = escape_markdown(name.name)
+            if not name.found:
+                notes.append(messages.no_player_named(shown))
+            elif name.more:
+                notes.append(messages.more_players_named(name.more, shown))
+    if result.skipped:
+        notes.append(messages.names_skipped(result.skipped, MAX_NAMES))
+    return notes
 
 
 def player_card(t: Tournament, player: Player) -> str:

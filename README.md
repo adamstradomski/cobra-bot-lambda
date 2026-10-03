@@ -369,7 +369,7 @@ uv run scripts/capture_snapshots.py <ID> --once
 1. On your test server: **Server Settings → Integrations → Webhooks → New Webhook**, pick the channel, and optionally give it the bot's name and avatar so the messages look like the bot's. **Copy Webhook URL**.
 2. Put it into `.env` in the repository root (git-ignored), one line: `DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…`. `uv run --env-file .env` loads it, and stops with `No environment file found` if the file is missing. Setting the variable in your shell and dropping `--env-file .env` works too.
 
-**How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Channel webhooks cannot post ephemeral messages, so `player` replies are public in the preview (the script says so on stderr). Discord applies the same embed and attachment rules to both.
+**How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Discord applies the same embed and attachment rules to both.
 
 It prints one line to stderr when done, e.g. `preview: standings of 20261001T160955Z.json sent as 2 message(s) in 420 ms` (the count includes the `--note` message). Warnings from the formatters (such as an identity missing from the short-name map) are printed too.
 

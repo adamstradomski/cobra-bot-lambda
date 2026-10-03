@@ -39,7 +39,7 @@ Discord: scope `applications.commands` only; replies go through interaction webh
 |---------|---------|------------|
 | `/cobra pairings` | `tournament` (string, required), `round` (integer ≥ 1, optional) | Public |
 | `/cobra standings` | `tournament` (string, required) | Public |
-| `/cobra player` | `tournament` (string, required), `query` (string, required, 1–32 chars) | Ephemeral |
+| `/cobra player` | `tournament` (string, required), `query` (string, required, 1–200 chars; up to 10 names separated by `,` or `;`) | Public |
 
 Registered globally by a script: `integration_types: [0, 1]` (guild, user), `contexts: [0, 1, 2]` (guild, bot DM, private channel).
 
@@ -47,7 +47,7 @@ Registered globally by a script: `integration_types: [0, 1]` (guild, user), `con
 
 | Module | Responsibility |
 |--------|----------------|
-| `handlers/interactions.py` | Lambda entry point: signature check, PING, deferred response (ephemeral flag for `player`), async invoke of Worker. |
+| `handlers/interactions.py` | Lambda entry point: signature check, PING, deferred response (public for every command), async invoke of Worker. |
 | `handlers/worker.py` | Lambda entry point: run command, send responses. |
 | `discord/verify.py` | Ed25519 verification of `X-Signature-Ed25519` + `X-Signature-Timestamp`. |
 | `discord/api.py` | Edit original response, post follow-ups; always `allowed_mentions: {"parse": []}`. |
@@ -244,13 +244,14 @@ Automated tests cover all criteria except AC-20 (manual).
 | AC-16 | Given a fake store and clock, when the same tournament is requested twice within 60 s, then one HTTP call is made; after 61 s, a second call is made. |
 | AC-17 | Given a 10-minute-old cache entry and a failing HTTP call, then data is returned marked stale with the stale notice; given no cache, "Cobra is unavailable, try again later."; given HTTP 404, "Tournament not found." |
 | AC-18 | Given a held lock and a fresh cache object appearing within 2 s, then the second caller makes no HTTP call. (Should) |
-| AC-19 | Given a request with an invalid signature, the handler returns 401; given a valid PING, `{"type": 1}`; given a `player` command, the deferred response has flag 64 and the Worker is invoked asynchronously. |
+| AC-19 | Given a request with an invalid signature, the handler returns 401; given a valid PING, `{"type": 1}`; given a `player` command, the deferred response is public (no flags) and the Worker is invoked asynchronously. |
 | AC-20 | Manual: on a test server and via user install in a DM, all three commands work against a real tournament; long standings arrive as several messages; no bot permissions were granted. |
 | AC-21 | Given names `@Mention`, `*bold_name~` and one with backticks, then every outgoing payload has `allowed_mentions.parse == []`, names appear literally inside code blocks, and no name closes a code block. In images names are drawn, never sent as message text. |
 | AC-22 | Given fixture `dss` (double-sided), then pairings show both games per table and round completion requires both games reported. |
 | AC-23 | Given `template.yaml`, then WorkerFunction has `MaximumRetryAttempts: 0` and the cache bucket has a lifecycle rule (template test). |
 | AC-24 | Given the command registration payload, then `integration_types == [0, 1]` and `contexts == [0, 1, 2]`. |
 | AC-26 | Given an export with registered players and no rounds (World Championship 2026 before round 1), when standings are requested, then the header is "Registered players — not started yet" and every player is listed, ranked 1 to N in Cobra's order: by name with only letters and digits counted, ignoring case and diacritics (`M.G.K.` between `metronome` and `Michael kwan`), not by the export's `rank`. |
+| AC-27 | Given `query` "Alice, zed, ali" where `ali` also matches Alice, then each matching player gets one card in rank order, a note says "No players match “zed”.", and a name matching more than 3 players notes "…and N more matched “name”"; past 10 names, "Only the first 10 names were searched (N more given)." |
 | AC-25 | Given a 10-minute-old cache entry and HTTP 401 from Cobra, then the cached data is returned marked stale with the note "Tournament is now private — data from <t:UNIX:R>" and the cache entry is unchanged; given no cache and HTTP 401, the reply is "This tournament is private." |
 
 ## 14. Risks

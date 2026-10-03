@@ -6,7 +6,14 @@ import pytest
 
 from cobra_bot.cobra.parser import parse_tournament
 from cobra_bot.domain.models import Player
-from cobra_bot.domain.search import SearchResult, normalize, search_players
+from cobra_bot.domain.search import (
+    MAX_NAMES,
+    SearchResult,
+    normalize,
+    search_names,
+    search_players,
+    split_names,
+)
 
 type LoadRaw = Callable[[str], object]
 
@@ -91,3 +98,71 @@ def test_matches_are_ordered_by_rank_and_limited() -> None:
 @pytest.mark.parametrize("query", ["", "   ", "́"])
 def test_empty_query_matches_nobody(query: str) -> None:
     assert search_players([_player(1, "Anna", 1)], query) == SearchResult((), 0)
+
+
+# --- several names ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("query", "names"),
+    [
+        ("Alice", ["Alice"]),
+        ("Alice, Bob", ["Alice", "Bob"]),
+        ("Alice;Bob", ["Alice", "Bob"]),  # semicolon too
+        ("  Alice  ,   Bob  ", ["Alice", "Bob"]),  # trimmed
+        ("Ann  Lee, Bob", ["Ann Lee", "Bob"]),  # inner spaces collapse
+        ("Alice,,Bob,", ["Alice", "Bob"]),  # empty names dropped
+        ("Żółw, zolw, ZÓŁW", ["Żółw"]),  # repeats (ignoring case and diacritics)
+        (",  ,", []),
+        ("", []),
+    ],
+)
+def test_split_names(query: str, names: list[str]) -> None:
+    assert split_names(query) == names
+
+
+def _roster() -> list[Player]:
+    return [
+        _player(1, "Alice", 3),
+        _player(2, "Alicja", 1),
+        _player(3, "Bob", 2),
+        _player(4, "Carol", 4),
+    ]
+
+
+def test_several_names_union_in_rank_order_once_each() -> None:
+    result = search_names(_roster(), "bob, ali, alice")
+
+    assert [p.id for p in result.matches] == [2, 3, 1]  # Alice once
+    assert [(n.name, n.found, n.more) for n in result.names] == [
+        ("bob", 1, 0),
+        ("ali", 2, 0),
+        ("alice", 1, 0),
+    ]
+    assert result.skipped == 0
+
+
+def test_each_name_keeps_its_own_limit() -> None:
+    result = search_names(_roster(), "a, bob", limit=1)
+
+    assert [(n.name, n.found, n.more) for n in result.names] == [
+        ("a", 3, 2),
+        ("bob", 1, 0),
+    ]
+    assert [p.id for p in result.matches] == [2, 3]
+
+
+def test_name_without_a_match_is_reported_not_dropped() -> None:
+    result = search_names(_roster(), "bob, zed")
+
+    assert [(n.name, n.found) for n in result.names] == [("bob", 1), ("zed", 0)]
+
+
+@pytest.mark.parametrize(("given", "skipped"), [(9, 0), (10, 0), (11, 1), (13, 3)])
+def test_at_most_ten_names_are_searched(given: int, skipped: int) -> None:
+    query = ", ".join(f"name{n}" for n in range(given))
+
+    result = search_names(_roster(), query)
+
+    assert len(result.names) == min(given, MAX_NAMES) == min(given, 10)
+    assert result.skipped == skipped

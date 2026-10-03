@@ -228,3 +228,14 @@ def test_ac26_standings_before_the_first_round_list_the_registered_players() -> 
     assert first.description.startswith("**Registered players — not started yet**\n")
     assert first.footer == "31 players"
     assert pairings == messages.NOT_STARTED
+
+
+def test_player_list_shows_every_named_player() -> None:
+    """Several comma-separated names: one card per matching player."""
+    cache, _ = _setup()
+
+    reply = _messages(run(Command("player", "4909", query="0017, 0042, nobody"), cache))
+
+    text = _text(reply)
+    assert "Player0017" in text and "Player0042" in text
+    assert "No players match “nobody”." in text

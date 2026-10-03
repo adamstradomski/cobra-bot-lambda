@@ -26,7 +26,7 @@ from cobra_bot.domain.rounds import (
     pairings_view,
     standings_view,
 )
-from cobra_bot.domain.search import search_players
+from cobra_bot.domain.search import search_names
 from cobra_bot.formatting.chunking import ImagePage, Message, chunk
 from cobra_bot.formatting.players import format_player_cards
 
@@ -47,11 +47,6 @@ class Command:
     tournament: str
     round: int | None = None
     query: str | None = None
-
-    @property
-    def ephemeral(self) -> bool:
-        """`/cobra player` replies privately (FR-09); the others are public."""
-        return self.name == "player"
 
 
 @dataclass(frozen=True)
@@ -209,5 +204,5 @@ def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Rep
                     )
         case "player":
             query = command.query or ""
-            found = search_players(t.players, query)
+            found = search_names(t.players, query)
             return chunk(format_player_cards(t, found, query, private=private))

@@ -1,6 +1,6 @@
 from builders import FETCHED_AT_TAG, pairing, plain, player, seat, tournament
 from cobra_bot.domain.models import Player, Round, Tournament
-from cobra_bot.domain.search import SearchResult
+from cobra_bot.domain.search import NameResult, NamesResult
 from cobra_bot.formatting.players import format_player_cards, player_card
 
 ALICE = player(1, "Alice", rank=1, points=6, corp="Nuvem SA: X", runner="Arissana: Y")
@@ -28,8 +28,11 @@ def _t(*rounds: Round) -> Tournament:
     return tournament(*rounds, players=(ALICE, BOB, CAROL))
 
 
-def _result(*players: Player, more: int = 0) -> SearchResult:
-    return SearchResult(matches=players, more=more)
+def _result(*players: Player, more: int = 0) -> NamesResult:
+    """One name that matched `players` and `more` not shown."""
+    return NamesResult(
+        matches=players, names=(NameResult("q", len(players) + more, more),), skipped=0
+    )
 
 
 def test_player_with_opponent() -> None:
@@ -97,3 +100,50 @@ def test_query_is_escaped() -> None:
     doc = format_player_cards(_t(ROUND_1), _result(), "*x_")
 
     assert doc.header[0] == "**Players matching “\\*x\\_”**"
+
+
+# --- several names ----------------------------------------------------------------
+
+
+def _names(*names: tuple[str, int, int], skipped: int = 0) -> NamesResult:
+    return NamesResult(
+        matches=(ALICE,),
+        names=tuple(NameResult(*n) for n in names),
+        skipped=skipped,
+    )
+
+
+def test_several_names_note_each_name_without_a_match() -> None:
+    doc = format_player_cards(
+        _t(ROUND_1), _names(("ali", 1, 0), ("zed", 0, 0)), "ali, zed"
+    )
+
+    assert doc.notes == ("No players match “zed”.",)
+
+
+def test_several_names_note_each_name_with_more_matches() -> None:
+    doc = format_player_cards(
+        _t(ROUND_1), _names(("ali", 1, 0), ("player", 7, 4)), "ali, player"
+    )
+
+    assert doc.notes == ("…and 4 more matched “player”",)
+
+
+def test_several_names_are_escaped_in_notes() -> None:
+    doc = format_player_cards(_t(ROUND_1), _names(("ali", 1, 0), ("*x_", 0, 0)), "q")
+
+    assert doc.notes == (r"No players match “\*x\_”.",)
+
+
+def test_names_past_the_limit_are_reported() -> None:
+    doc = format_player_cards(_t(ROUND_1), _names(("ali", 1, 0), skipped=2), "q")
+
+    assert doc.notes == ("Only the first 10 names were searched (2 more given).",)
+
+
+def test_one_name_keeps_the_single_name_notes() -> None:
+    result = NamesResult(matches=(), names=(NameResult("zed", 0, 0),), skipped=0)
+
+    doc = format_player_cards(_t(ROUND_1), result, "zed")
+
+    assert doc.notes == ("No players match.",)
