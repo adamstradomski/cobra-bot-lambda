@@ -277,3 +277,35 @@ def test_player_search_before_round_1_ranks_like_standings(
         ("Player0001", by_name.index("Player0001") + 1),
         ("Player0002", by_name.index("Player0002") + 1),
     ]
+
+
+def test_images_are_reused_until_the_data_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Separate from the 60 s data cache: same data, no drawing; new data,
+    drawn again. The header (data age) is always new."""
+    from cobra_bot.cobra.cache import InMemoryCacheStore
+    from cobra_bot.formatting import image
+    from cobra_bot.image_cache import ImageCache
+
+    drawn: list[int] = []
+    real = image.render_png
+    monkeypatch.setattr(
+        image, "render_png", lambda table, fonts: drawn.append(1) or real(table, fonts)
+    )
+    images = ImageCache(InMemoryCacheStore(), clock=lambda: FETCHED_AT)
+    export = json.loads(fixture_bytes("dss"))
+    fetcher = Fetcher({5018: json.dumps(export).encode()})
+    cache = _cache(fetcher)
+    command = Command("standings", "5018")
+
+    first = _images(execute(command, cache, FONTS, images))
+    second = _images(execute(command, cache, FONTS, images))
+    assert len(drawn) == 1
+    assert second.pages[0].png == first.pages[0].png
+
+    export["players"][0]["matchPoints"] += 3  # a result came in
+    fetcher.bodies[5018] = json.dumps(export).encode()
+    later = _cache(fetcher)  # data cache refreshed (another 60 s window)
+    execute(command, later, FONTS, images)
+    assert len(drawn) == 2

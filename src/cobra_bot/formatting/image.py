@@ -10,8 +10,10 @@ Drawing is in memory and the fonts are injected (`cobra_bot.fonts.load`), so
 this module touches no files.
 """
 
+import hashlib
 import io
-from collections.abc import Sequence
+import json
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -32,6 +34,9 @@ from cobra_bot.formatting.players import format_player_cards
 from cobra_bot.formatting.standings import format_standings
 from cobra_bot.formatting.text import code_text, fit, short_identity
 
+# Bump when the drawing changes in a way the cells and style constants in
+# `table_key` do not show, so cached images are not reused (image_cache.py).
+RENDER_VERSION = 1
 MAX_ROWS = 40  # per image
 MAX_MESSAGES = DISCORD_LIMITS.messages
 NAME_CHARS = 28
@@ -56,6 +61,7 @@ PADDING_Y = 18
 COLUMN_GAP = 34
 
 type Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+type Draw = Callable[[Table], bytes]  # a page's table -> its PNG
 type Align = Literal["left", "right"]
 
 
@@ -111,6 +117,32 @@ def render_png(table: Table, fonts: Fonts) -> bytes:
     out = io.BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()
+
+
+def table_key(table: Table) -> str:
+    """SHA-256 of everything the image of `table` shows: cells, columns, the
+    style constants and `RENDER_VERSION`. Equal keys draw equal PNGs."""
+    payload = {
+        "version": RENDER_VERSION,
+        "style": [
+            FONT_SIZE,
+            ROW_HEIGHT,
+            HEADING_HEIGHT,
+            PADDING_X,
+            PADDING_Y,
+            COLUMN_GAP,
+            BACKGROUND,
+            STRIPE,
+            RULE,
+        ],
+        "columns": [[c.heading, c.align] for c in table.columns],
+        "groups": [
+            [[[cell.text, cell.color, cell.bold] for cell in row] for row in group]
+            for group in table.groups
+        ],
+    }
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _column_widths(table: Table, fonts: Fonts) -> list[int]:
@@ -428,22 +460,44 @@ def _score(pairing: Pairing, mine: int | None, theirs: int | None) -> Cell:
 
 
 def standings_images(
-    t: Tournament, view: StandingsView, fonts: Fonts, *, private: bool = False
+    t: Tournament,
+    view: StandingsView,
+    fonts: Fonts,
+    *,
+    private: bool = False,
+    draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
     doc = format_standings(t, view, private=private)
     footer = messages.compact_standings_footer(view.after_round, len(view.players))
     return image_pages(
-        doc, standings_table(view), footer, fonts, "standings", row_entries=True
+        doc,
+        standings_table(view),
+        footer,
+        fonts,
+        "standings",
+        row_entries=True,
+        draw=draw,
     )
 
 
 def pairings_images(
-    t: Tournament, view: PairingsView, fonts: Fonts, *, private: bool = False
+    t: Tournament,
+    view: PairingsView,
+    fonts: Fonts,
+    *,
+    private: bool = False,
+    draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
     doc = format_pairings(t, view, private=private)
     footer = messages.compact_pairings_footer(view.round_number, len(view.pairings))
     return image_pages(
-        doc, pairings_table(t, view), footer, fonts, "pairings", row_entries=False
+        doc,
+        pairings_table(t, view),
+        footer,
+        fonts,
+        "pairings",
+        row_entries=False,
+        draw=draw,
     )
 
 
@@ -454,6 +508,7 @@ def player_images(
     fonts: Fonts,
     *,
     private: bool = False,
+    draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
     """The players found, as rows (`players_table`); the header names the
     query and the notes say which names matched nobody or more."""
@@ -469,6 +524,7 @@ def player_images(
         fonts,
         "players",
         row_entries=True,
+        draw=draw,
     )
 
 
@@ -507,13 +563,14 @@ def image_pages(
     name: str,
     *,
     row_entries: bool,
+    draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
     """One message per page, at most `MAX_MESSAGES`. The first has the title,
     link and header; every one has the legend, and the page number when there
     are several. Pages past the limit are dropped and the last message says how
     many entries are missing, with the Cobra link (FR-14). An entry is a row
     with `row_entries` (a player; groups may then break across pages), else a
-    group (a table, kept whole)."""
+    group (a table, kept whole). `draw` replaces `render_png` (image cache)."""
     pages = paginate_groups(table.groups, MAX_ROWS, split=row_entries)
     kept = pages[:MAX_MESSAGES]
     omitted = sum(
@@ -539,6 +596,7 @@ def image_pages(
             color=EMBED_COLOR,
             image=filename,
         )
-        png = render_png(Table(table.columns, groups), fonts)
+        page_table = Table(table.columns, groups)
+        png = draw(page_table) if draw else render_png(page_table, fonts)
         out.append(ImagePage(embed, filename, png))
     return tuple(out)

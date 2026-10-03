@@ -164,6 +164,8 @@ Shortcode resolution (`findings.md` Q4): `GET /{CODE}` without following redirec
 - 401 from Cobra (private tournament, see `docs/findings.md` Q5; FR-21): the cache is not overwritten. Serve the cached copy marked stale, any age (up to the 1-day bucket lifecycle); notice "Tournament is now private — data from <t:UNIX:R>" (§9). No cached copy → "This tournament is private."
 - **Single-flight (Should, NFR-03):** before fetching, the Worker creates `locks/{id}` with a conditional write (`If-None-Match: *`) containing a timestamp. The winner fetches and deletes the lock. Others wait up to 2 s polling for a fresh cache object, then serve stale data if available, else fetch themselves. A lock older than 15 s is treated as abandoned and replaced (conditional on its ETag).
 
+- **Image cache** (`image_cache.py`, decided 2026-10-03), separate from the data cache: `images/{sha256}.png` holds a drawn reply image; the hash covers exactly what the image shows (cells, columns, colours, layout constants, `RENDER_VERSION` in `formatting/image.py`; bump it when drawing changes in a way those do not show). Kept **10 minutes**: drawing is the slow part of a reply, and while the data does not change the images would come out the same, so they outlive the 60 s data cache. The embed text around an image (header, data age) is built fresh every time. A failed read counts as a miss and a failed write is logged; neither blocks the reply. The Worker logs `images cached=N drawn=M` per reply.
+
 ## 8. Player search
 
 - Normalisation of both name and query: Unicode NFKD, remove combining marks, `casefold()`, plus an explicit map for letters that do not decompose (`ł→l`, `ø→o`, `đ→d`, `ß→ss`, `æ→ae`, `œ→oe`).

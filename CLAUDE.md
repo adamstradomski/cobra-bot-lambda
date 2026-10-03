@@ -11,7 +11,7 @@ All documentation, code comments, commit messages, and READMEs are written in En
 - Python 3.14 (AWS Lambda managed runtime `python3.14`; see `docs/spec.md` §3). Pin it in `pyproject.toml` and `template.yaml`.
 - Package/env manager: `uv`. Lint/format: `ruff`. Types: `mypy --strict`. Tests: `pytest`.
 - Runtime: AWS Lambda (InteractionsFunction + WorkerFunction), Discord HTTP interactions, AWS SAM, region `eu-central-1`.
-- Cache: Amazon S3 (shared), TTL 60 s.
+- Cache: Amazon S3 (shared): Cobra data 60 s, drawn images 10 min.
 - Libraries: `httpx`, `PyNaCl`, `Pillow` (reply images; imported only by the Worker, never by InteractionsFunction); `boto3` is provided by the Lambda runtime (dev dependency for tests and types only).
 
 ## Layout
@@ -67,7 +67,7 @@ Before finishing any task, run pytest, ruff check, ruff format --check and mypy 
 ## Do not change without asking
 
 - Command names, options, visibility (public vs ephemeral), integration types and contexts — a public contract registered in Discord.
-- Cache TTL (60 s), the stale-data behaviour, and the 5-message cap.
+- Cache TTLs (Cobra data 60 s, images 10 min), the stale-data behaviour, and the 5-message cap.
 - `template.yaml` resources, IAM permissions, retry settings, template parameters and environment variable names, region, budget.
 - Python version; adding or replacing dependencies.
 - Anything listed as Out of scope in `docs/requirements.md` (e.g. auto-publishing, `bot` scope, Gateway).

@@ -32,7 +32,8 @@ from cobra_bot.formatting.chunking import ImagePage, Message, chunk
 from cobra_bot.formatting.players import format_player_cards
 
 if TYPE_CHECKING:
-    from cobra_bot.formatting.image import Fonts
+    from cobra_bot.formatting.image import Draw, Fonts, Table
+    from cobra_bot.image_cache import ImageCache
 
 log = logging.getLogger(__name__)
 
@@ -138,10 +139,15 @@ class Images:
 type Reply = tuple[Message, ...] | Images | str
 
 
-def execute(command: Command, cache: TournamentCache, fonts: Fonts) -> Reply:
+def execute(
+    command: Command,
+    cache: TournamentCache,
+    fonts: Fonts,
+    images: ImageCache | None = None,
+) -> Reply:
     """Run a command end to end and map every expected failure to a message
     (FR-16). Unexpected exceptions propagate to the handler. `fonts` draw the
-    images (`cobra_bot.fonts.load`)."""
+    images (`cobra_bot.fonts.load`); `images` reuses images drawn before."""
     try:
         ref = parse_ref(command.tournament)
     except InvalidTournamentRef:
@@ -174,13 +180,29 @@ def execute(command: Command, cache: TournamentCache, fonts: Fonts) -> Reply:
     except ValueError:  # invalid JSON or ParseError
         log.warning("unreadable export for tournament %s", tournament_id)
         return messages.COBRA_DATA_UNREADABLE
-    return _run(command, t, fonts, private=result.private)
+    return _run(command, t, fonts, images, private=result.private)
 
 
-def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Reply:
+def _run(
+    command: Command,
+    t: Tournament,
+    fonts: Fonts,
+    images: ImageCache | None,
+    *,
+    private: bool,
+) -> Reply:
     # Imported here: it loads Pillow, which InteractionsFunction (it imports this
     # module for parse_command) must not pay for within Discord's 3 s.
     from cobra_bot.formatting import image
+
+    draw: Draw | None = None
+    if images is not None:
+        cached = images
+
+        def draw(table: Table) -> bytes:
+            return cached.png(
+                image.table_key(table), lambda: image.render_png(table, fonts)
+            )
 
     match command.name:
         case "pairings":
@@ -193,7 +215,9 @@ def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Rep
                     return messages.TOP_CUT_NOT_SUPPORTED
                 case PairingsView() as pairings:
                     return Images(
-                        image.pairings_images(t, pairings, fonts, private=private)
+                        image.pairings_images(
+                            t, pairings, fonts, private=private, draw=draw
+                        )
                     )
         case "standings":
             match standings_view(t):
@@ -201,11 +225,15 @@ def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Rep
                     return messages.NOT_STARTED
                 case StandingsView() as standings:
                     return Images(
-                        image.standings_images(t, standings, fonts, private=private)
+                        image.standings_images(
+                            t, standings, fonts, private=private, draw=draw
+                        )
                     )
         case "player":
             query = command.query or ""
             found = search_names(ranked_players(t), query)
             if not found.matches:  # one sentence, no table to draw
                 return chunk(format_player_cards(t, found, query, private=private))
-            return Images(image.player_images(t, found, query, fonts, private=private))
+            return Images(
+                image.player_images(t, found, query, fonts, private=private, draw=draw)
+            )

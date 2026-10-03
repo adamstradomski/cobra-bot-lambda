@@ -649,3 +649,65 @@ def test_player_images_message(fonts: Fonts) -> None:
     assert page.embed.footer == "Round 1 · 1 player"
     assert page.embed.description.startswith("**Players matching “alice, zed”**")
     assert page.embed.description.endswith("No players match “zed”.")
+
+
+# --- image cache key --------------------------------------------------------------
+
+
+def _table(text: str = "Alice", color: str = c.TEXT, bold: bool = False) -> Table:
+    return Table(
+        columns=(Column("Player"), Column("Pts", "right")),
+        groups=(((Cell(text, color, bold), Cell("3", c.SCORE, True)),),),
+    )
+
+
+def test_table_key_is_stable_for_equal_tables() -> None:
+    assert c.table_key(_table()) == c.table_key(_table())
+    assert len(c.table_key(_table())) == 64
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        _table(text="Bob"),
+        _table(color=c.SECONDARY),
+        _table(bold=True),
+        Table((Column("Name"), Column("Pts", "right")), _table().groups),
+        Table((Column("Player"), Column("Pts")), _table().groups),
+        Table(_table().columns, (*_table().groups, *_table().groups)),
+    ],
+)
+def test_table_key_changes_with_anything_drawn(changed: Table) -> None:
+    assert c.table_key(changed) != c.table_key(_table())
+
+
+def test_table_key_changes_with_the_render_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = c.table_key(_table())
+    monkeypatch.setattr(c, "RENDER_VERSION", c.RENDER_VERSION + 1)
+
+    assert c.table_key(_table()) != before
+
+
+def test_table_key_changes_with_the_colours(monkeypatch: pytest.MonkeyPatch) -> None:
+    before = c.table_key(_table())
+    monkeypatch.setattr(c, "STRIPE", "#000000")
+
+    assert c.table_key(_table()) != before
+
+
+def test_draw_replaces_render_png(fonts: Fonts) -> None:
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
+    )
+    seen: list[Table] = []
+
+    def draw(table: Table) -> bytes:
+        seen.append(table)
+        return b"cached"
+
+    (page,) = c.standings_images(t, _standings(t), fonts, draw=draw)
+
+    assert page.png == b"cached"
+    assert seen == [c.standings_table(_standings(t))]
