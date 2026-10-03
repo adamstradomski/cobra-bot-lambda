@@ -336,7 +336,7 @@ uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--s
 
 ### `scripts/preview.py` — see a reply in Discord without deploying
 
-Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings` and `standings`, a text embed for `player`. `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
+Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings`, `standings` and `player` (a one-sentence text embed when nothing matches or for an error). `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
 
 ```bash
 uv run --env-file .env scripts/preview.py SOURCE pairings [--round N] [OPTIONS]

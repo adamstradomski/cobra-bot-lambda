@@ -146,6 +146,9 @@ IDENTITY = "ID"
 POINTS = "Pts"
 SOS = "SoS"
 TOTAL = "Total"
+OPPONENT = "Opponent"
+SCORE = "Score"
+NOT_PAIRED = "not paired"
 
 
 def game_heading(game: int) -> str:
@@ -166,6 +169,11 @@ def compact_standings_footer(after_round: int | None, players: int) -> str:
 
 def compact_pairings_footer(round_number: int, tables: int) -> str:
     return f"Round {round_number} · {_count(tables, 'table')}"
+
+
+def compact_players_footer(round_number: int | None, players: int) -> str:
+    parts = [f"Round {round_number}"] if round_number else []
+    return " · ".join([*parts, _count(players, "player")])
 
 
 # --- command registration (SPEC §2) --------------------------------------------

@@ -2,7 +2,6 @@
 (fake fetcher, in-memory store). The Worker end-to-end tests cover the wiring."""
 
 import json
-import re
 from collections.abc import Callable
 from datetime import timedelta
 
@@ -109,9 +108,12 @@ def test_standings() -> None:
 def test_player() -> None:
     cache, _ = _setup()
 
-    reply = _messages(run(Command("player", "4909", query="layer0017"), cache))
+    reply = _images(run(Command("player", "4909", query="layer0017"), cache))
 
-    assert re.search(r"^ 2[.] Player0017 +18$", _text(reply), re.MULTILINE)
+    (page,) = reply.pages
+    assert page.embed.description.startswith("**Players matching “layer0017”**")
+    assert page.embed.footer == "Round 8 · 1 player"
+    assert page.filename == "players-1.png"
 
 
 def test_shortcode_reference() -> None:
@@ -234,8 +236,8 @@ def test_player_list_shows_every_named_player() -> None:
     """Several comma-separated names: one card per matching player."""
     cache, _ = _setup()
 
-    reply = _messages(run(Command("player", "4909", query="0017, 0042, nobody"), cache))
+    reply = _images(run(Command("player", "4909", query="0017, 0042, nobody"), cache))
 
-    text = _text(reply)
-    assert "Player0017" in text and "Player0042" in text
-    assert "No players match “nobody”." in text
+    (page,) = reply.pages
+    assert page.embed.footer == "Round 8 · 2 players"
+    assert page.embed.description.endswith("No players match “nobody”.")

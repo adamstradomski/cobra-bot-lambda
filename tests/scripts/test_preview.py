@@ -172,13 +172,13 @@ def test_stale_and_private_are_exclusive(preview_script: ModuleType) -> None:
 def test_dry_run_writes_utf8_whatever_the_console_encoding(
     preview_script: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The dss fixture has `Maëlig`; a cp1250 console (Polish Windows) cannot
-    encode `ë`. Player cards carry names as text."""
+    """A cp1250 console (Polish Windows) cannot encode `ë`; the query is
+    echoed in the header."""
     raw = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1250"))
 
     code = preview_script.main(
-        [DSS, "player", "maelig", "--dry-run"], env={}, clock=lambda: FETCHED_AT
+        [DSS, "player", "Maëlig", "--dry-run"], env={}, clock=lambda: FETCHED_AT
     )
 
     assert code == 0
@@ -429,7 +429,9 @@ def test_save_images_without_images_writes_nothing(
 ) -> None:
     out = tmp_path / "png"
 
-    _dry_run(preview_script, capsys, [DSS, "player", "0029", "--save-images", str(out)])
+    _dry_run(
+        preview_script, capsys, [DSS, "player", "nobody", "--save-images", str(out)]
+    )
 
     assert list(out.iterdir()) == []
 

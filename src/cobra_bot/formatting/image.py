@@ -1,4 +1,4 @@
-"""Standings and pairings as a PNG image in an embed (SPEC §9).
+"""Standings, pairings and player cards as a PNG image in an embed (SPEC §9).
 
 Full colours on every client, real columns with headings, names and IDs not cut
 to code-block widths. The text cannot be selected or searched. The embed keeps
@@ -19,10 +19,16 @@ from PIL import Image, ImageDraw, ImageFont
 
 from cobra_bot import messages
 from cobra_bot.domain.models import Pairing, Player, Seat, Tournament
-from cobra_bot.domain.rounds import PairingsView, StandingsView
+from cobra_bot.domain.rounds import (
+    PairingsView,
+    StandingsView,
+    swiss_round_numbers,
+)
+from cobra_bot.domain.search import NamesResult
 from cobra_bot.formatting.chunking import DISCORD_LIMITS, Embed, ImagePage
 from cobra_bot.formatting.document import EMBED_COLOR, Document
 from cobra_bot.formatting.pairings import format_pairings
+from cobra_bot.formatting.players import format_player_cards
 from cobra_bot.formatting.standings import format_standings
 from cobra_bot.formatting.text import code_text, fit, short_identity
 
@@ -333,6 +339,91 @@ def _total(seat: Seat) -> int | None:
     return (seat.corp_score or 0) + (seat.runner_score or 0)
 
 
+def players_table(t: Tournament, players: Sequence[Player]) -> Table:
+    """One row per player: the standings columns, then the player's table in
+    the latest Swiss round, the side played there, the opponent and the score
+    from the player's side. Before any round only the standings columns."""
+    swiss = swiss_round_numbers(t)
+    columns: tuple[Column, ...] = (
+        Column(messages.RANK, "right"),
+        Column(messages.PLAYER),
+        Column(messages.CORP),
+        Column(messages.RUNNER),
+        Column(messages.POINTS, "right"),
+        Column(messages.SOS, "right"),
+    )
+    if swiss:
+        columns += (
+            Column(messages.player_round(swiss[-1])),
+            Column(messages.SIDE),
+            Column(messages.OPPONENT),
+            Column(messages.SCORE, "right"),
+        )
+    rows = []
+    for p in players:
+        row: Row = (
+            Cell(str(p.rank)),
+            Cell(_name(p), bold=True),
+            _identity(p.corp_identity, CORP),
+            _identity(p.runner_identity, RUNNER),
+            Cell(str(p.match_points), SCORE, bold=True),
+            Cell(f"{p.sos:.3f}", SECONDARY),
+        )
+        if swiss:
+            row += _latest_pairing(t, p, swiss[-1])
+        rows.append((row,))
+    return Table(columns=columns, groups=tuple(rows))
+
+
+def _latest_pairing(t: Tournament, p: Player, number: int) -> Row:
+    pairing = next((x for x in t.rounds[number - 1] if p.id in x.player_ids), None)
+    if pairing is None:
+        return (
+            Cell(messages.UNKNOWN_IDENTITY, SECONDARY),
+            Cell(""),
+            Cell(messages.NOT_PAIRED, SECONDARY),
+            Cell(""),
+        )
+    label = Cell(f"T{pairing.table}")
+    if pairing.is_bye:
+        return (label, Cell(""), Cell(messages.BYE, SECONDARY), Cell(""))
+    mine, theirs = (
+        (pairing.seat1, pairing.seat2)
+        if pairing.seat1.player_id == p.id
+        else (pairing.seat2, pairing.seat1)
+    )
+    if pairing.double_sided:
+        side = Cell(
+            f"{messages.CORP_TAG} {_shown(mine.corp_score)} · "
+            f"{messages.RUNNER_TAG} {_shown(mine.runner_score)}",
+            SECONDARY,
+        )
+        points = (_total(mine), _total(theirs))
+    else:
+        corp = mine.role == "corp"
+        side = Cell(
+            messages.CORP if corp else messages.RUNNER, CORP if corp else RUNNER
+        )
+        points = (mine.combined_score, theirs.combined_score)
+    return (
+        label,
+        side,
+        Cell(_seat_name(_player(t, theirs))),
+        _score(pairing, *points),
+    )
+
+
+def _score(pairing: Pairing, mine: int | None, theirs: int | None) -> Cell:
+    """`3 – 0` from the player's side: bold when won, secondary when lost; `–`
+    while unreported, `ID` for an intentional draw."""
+    (shown, (color, bold)), (other, _) = _styles(pairing, mine, theirs)
+    if pairing.intentional_draw:
+        return Cell(messages.INTENTIONAL_DRAW, SCORE)
+    if mine is None and theirs is None:
+        return Cell(messages.NO_RESULT, SECONDARY)
+    return Cell(f"{shown} – {other}", SECONDARY if color == SECONDARY else SCORE, bold)
+
+
 # --- messages ---------------------------------------------------------------
 
 
@@ -353,6 +444,31 @@ def pairings_images(
     footer = messages.compact_pairings_footer(view.round_number, len(view.pairings))
     return image_pages(
         doc, pairings_table(t, view), footer, fonts, "pairings", row_entries=False
+    )
+
+
+def player_images(
+    t: Tournament,
+    result: NamesResult,
+    query: str,
+    fonts: Fonts,
+    *,
+    private: bool = False,
+) -> tuple[ImagePage, ...]:
+    """The players found, as rows (`players_table`); the header names the
+    query and the notes say which names matched nobody or more."""
+    doc = format_player_cards(t, result, query, private=private)
+    swiss = swiss_round_numbers(t)
+    footer = messages.compact_players_footer(
+        swiss[-1] if swiss else None, len(result.matches)
+    )
+    return image_pages(
+        doc,
+        players_table(t, result.matches),
+        footer,
+        fonts,
+        "players",
+        row_entries=True,
     )
 
 

@@ -205,4 +205,6 @@ def _run(command: Command, t: Tournament, fonts: Fonts, *, private: bool) -> Rep
         case "player":
             query = command.query or ""
             found = search_names(t.players, query)
-            return chunk(format_player_cards(t, found, query, private=private))
+            if not found.matches:  # one sentence, no table to draw
+                return chunk(format_player_cards(t, found, query, private=private))
+            return Images(image.player_images(t, found, query, fonts, private=private))
