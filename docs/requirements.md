@@ -1,6 +1,6 @@
 # Requirements — Cobra Discord Bot
 
-Status: Draft v0.2 · 2026-10-01
+Status: Draft v0.3 · 2026-10-03
 
 ## 1. Purpose
 
@@ -66,7 +66,7 @@ The bot is public. It can be added to any Discord server (server install) and by
 | NFR-11 | Must | Test fixtures derived from real tournaments are anonymised before being committed. |
 | NFR-12 | Must | Logs go to CloudWatch with 14-day retention; full Cobra payloads are not logged. |
 | NFR-13 | Must | AWS budget alarm at USD 5/month. |
-| NFR-14 | Must | Infrastructure defined with AWS SAM in region `eu-central-1`; deployment is manual (`sam deploy`). |
+| NFR-14 | Must | Infrastructure defined with AWS SAM in region `eu-central-1`; deployed by GitHub Actions when `main` moves (`.github/workflows/deploy.yml`), or manually with `sam deploy`. |
 | NFR-15 | Must | GitHub Actions runs lint, type-check and tests on every push and pull request. |
 | NFR-16 | Must | Requests to Cobra use an identifying User-Agent, an 8-second timeout, and no aggressive retries. |
 | NFR-17 | Should | Running cost stays within the AWS free tier at expected load (load TBD). |
@@ -89,7 +89,5 @@ The bot is public. It can be added to any Discord server (server install) and by
 
 ## 8. Open items (TBD)
 
-- Shape of Cobra JSON while a round is in progress (verify during the World Championship weekend, task T01).
-- Whether shortcodes can be resolved to IDs.
 - Response-time target, expected load.
 - NSG consent — to be requested after showing the MVP.

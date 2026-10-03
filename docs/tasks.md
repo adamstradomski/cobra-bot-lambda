@@ -94,7 +94,7 @@ Exception: runs before the repo scaffold, as a standalone script; not covered by
 ## Phase 5 — Handlers
 
 ### T20 — Interactions handler
-- PING, routing, deferred ack (ephemeral for `player`), async invoke of Worker (boto3 client injected).
+- PING, routing, deferred ack (public for every command; `player` was ephemeral until 2026-10-03), async invoke of Worker (boto3 client injected).
 - **DoD:** AC-19 passes.
 
 ### T21 — Worker handler
