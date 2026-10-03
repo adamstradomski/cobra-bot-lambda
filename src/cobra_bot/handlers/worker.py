@@ -59,6 +59,7 @@ class WorkerApp:
         except Exception:
             log.exception("command %s failed", job.command.name)
             reply = messages.INTERNAL_ERROR
+        prepared = time.monotonic()
         webhook = self._webhooks(job.application_id)
         try:
             if isinstance(reply, str):
@@ -82,10 +83,14 @@ class WorkerApp:
             if self._images
             else (0, 0)
         )
+        finished = time.monotonic()
         log.info(
-            "command=%s done in %.0f ms images cached=%d drawn=%d",
+            "command=%s done in %.0f ms (reply %.0f ms, send %.0f ms) "
+            "images cached=%d drawn=%d",
             job.command.name,
-            (time.monotonic() - started) * 1000,
+            (finished - started) * 1000,
+            (prepared - started) * 1000,
+            (finished - prepared) * 1000,
             hits,
             misses,
         )
