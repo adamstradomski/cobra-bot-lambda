@@ -156,6 +156,68 @@ def test_last_complete_round_is_used_when_a_later_round_is_partial() -> None:
     assert view.after_round == 1
 
 
+# --- standings round: what Cobra has counted (findings Q2) -------------------------
+
+
+def _with_points(*points: int) -> tuple[Player, ...]:
+    """Players 1, 2, ... ranked in that order, with these `matchPoints`."""
+    return tuple(
+        replace(_player(pid, pid), match_points=mp)
+        for pid, mp in enumerate(points, start=1)
+    )
+
+
+def _bye(table: int, pid: int, score: int) -> Pairing:
+    empty = Seat(None, None, 0, None, None, None)
+    return Pairing(
+        table, Seat(pid, None, score, None, None, None), empty, False, False, False
+    )
+
+
+def _after_round(*rounds: Round, points: tuple[int, ...]) -> int:
+    view = standings_view(_tournament(*rounds, players=_with_points(*points)))
+    assert isinstance(view, StandingsView)
+    return view.after_round
+
+
+def test_ac07_complete_round_not_yet_counted_by_cobra() -> None:
+    """World Championship 2026, round 3: every result in, points still after 2."""
+    r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
+
+    assert _after_round(r1, r2, points=(3, 3)) == 1
+
+
+def test_complete_round_counted_by_cobra() -> None:
+    r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
+
+    assert _after_round(r1, r2, points=(6, 6)) == 2
+
+
+def test_complete_round_1_not_yet_counted_means_no_completed_rounds() -> None:
+    assert _after_round((_single(1, 1, 2, 3),), points=(0, 0)) == 0
+
+
+def test_points_matching_no_round_fall_back_to_last_complete_round() -> None:
+    """E.g. points adjusted by hand: trust result reporting, as before."""
+    r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
+
+    assert _after_round(r1, r2, points=(5, 6)) == 2
+
+
+def test_bye_points_count_towards_the_round() -> None:
+    """Round 2 not counted yet; without the bye, no round would fit."""
+    rnd = (_single(1, 1, 2, 3), _bye(2, 3, 3))
+
+    assert _after_round(rnd, rnd, points=(3, 3, 3)) == 1
+
+
+def test_double_sided_points_are_the_sum_of_both_games() -> None:
+    """Round 2 not counted yet; counting one game only, no round would fit."""
+    rnd = (_double(3, 3),)  # each seat: corp 3 + runner 3 = 6
+
+    assert _after_round(rnd, rnd, points=(6, 6)) == 1
+
+
 # --- AC-22: double-sided completion ----------------------------------------------
 
 

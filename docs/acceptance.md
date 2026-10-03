@@ -19,8 +19,8 @@ Task T25. Run against a deployed stack (README, Deployment) and a real Cobra tou
 |---|-------|----------|--------|
 | A1 | Install via the Install Link, **Add to server** | Only `applications.commands` requested; no permissions; no bot member joins the server | |
 | A2 | `/cobra pairings tournament:<id>` | Public reply; header "Round N pairings — …"; the latest Swiss round; "Top cut in progress — not supported yet" if the tournament has a cut | |
-| A3 | `/cobra pairings tournament:<id> round:1` | Round 1 pairings in a coloured table, two lines per table with the Corp first and the points each player scored; byes shown as one `BYE` line | |
-| A4 | `/cobra standings tournament:<large id>` | Several messages, ranks in order; "…and N more — full list on Cobra" only if over 5 messages | |
+| A3 | `/cobra pairings tournament:<id> round:1` | Round 1 pairings as an image with column headings, two rows per table with the Corp first and the points each player scored; byes shown as one `BYE` row | |
+| A4 | `/cobra standings tournament:<large id>` | One message with several image pages (`N / M` in the footers), ranks in order; "…and N more — full list on Cobra" only if over 5 pages | |
 | A5 | `/cobra player tournament:<id> query:<part of a name>` | **Everyone** in the channel sees the reply; rank, points, SoS, IDs and the latest pairing or bye | |
 | A6 | `/cobra player` with a name containing diacritics, typed without them | The player is found (FR-09) | |
 | A7 | Tournament given as a Cobra URL (`https://tournaments.nullsignal.games/tournaments/<id>/…`) | Same reply as with the ID | |

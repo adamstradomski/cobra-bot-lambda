@@ -23,7 +23,7 @@ Priorities: **MUST** / **SHOULD** / **COULD**. Unconfirmed decisions are marked 
 - Standings show IDs on a second line; pairings show the points each player scored instead of a score from the Corp's side, and have no column header.
 - Double-sided pairings show the two games as columns instead of `↳` lines.
 
-**Changes in v4 (2026-10-03):** standings and pairings are drawn as a **PNG image** in the embed (§7). Sections 1–3 still describe the code-block tables, which player cards (§4) use. The image layout was chosen after trying it in Discord with `scripts/preview.py` against an embed with Components V2 controls and a plain-markdown layout.
+**Changes in v4 (2026-10-03):** standings and pairings are drawn as a **PNG image** in the embed (§7). Player search followed the same day (I-13). Sections 1–4 still describe the code-block tables, which the formatters and their golden files keep. The image layout was chosen after trying it in Discord with `scripts/preview.py` against an embed with Components V2 controls and a plain-markdown layout.
 
 **Changes from v2:** standings narrow to **22 columns** with **3 lines per player** and no header row: rank, name and points; Corp ID and SoS; Runner ID. Pairings keep the 34-column limit.
 
@@ -182,7 +182,7 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 - Exact Cobra API format for results and top cut beyond what `docs/findings.md` answers.
 - Wording of empty states (C-12).
 
-## 7. Images (standings and pairings, v4)
+## 7. Images (standings, pairings and player search, v4)
 
 | ID | Priority | Requirement |
 |----|----------|-------------|

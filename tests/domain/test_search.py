@@ -131,6 +131,7 @@ def _roster() -> list[Player]:
 
 
 def test_several_names_union_in_rank_order_once_each() -> None:
+    """AC-27: a player matched by two names gets one card, in rank order."""
     result = search_names(_roster(), "bob, ali, alice")
 
     assert [p.id for p in result.matches] == [2, 3, 1]  # Alice once
@@ -153,6 +154,7 @@ def test_each_name_keeps_its_own_limit() -> None:
 
 
 def test_name_without_a_match_is_reported_not_dropped() -> None:
+    """AC-27: "No players match “zed”." is built from this."""
     result = search_names(_roster(), "bob, zed")
 
     assert [(n.name, n.found) for n in result.names] == [("bob", 1), ("zed", 0)]
@@ -160,6 +162,7 @@ def test_name_without_a_match_is_reported_not_dropped() -> None:
 
 @pytest.mark.parametrize(("given", "skipped"), [(9, 0), (10, 0), (11, 1), (13, 3)])
 def test_at_most_ten_names_are_searched(given: int, skipped: int) -> None:
+    """AC-27: names past the tenth are counted, not searched."""
     query = ", ".join(f"name{n}" for n in range(given))
 
     result = search_names(_roster(), query)
