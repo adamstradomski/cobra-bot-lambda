@@ -38,8 +38,8 @@ RULE = "#3f4147"
 TEXT = "#dbdee1"
 SECONDARY = "#949ba4"
 SCORE = "#f0b232"
-CORP = "#5ca8ec"
-RUNNER = "#c97ddc"
+CORP = "#7998ec"  # NSG Corp card-back blue (hue 224), lightened to read on BACKGROUND
+RUNNER = "#dd4847"  # NSG Runner card-back red
 
 # Pixels, drawn at twice the displayed size so text stays sharp.
 FONT_SIZE = 30

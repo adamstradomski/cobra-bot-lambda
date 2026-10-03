@@ -52,6 +52,11 @@ def preview_script() -> ModuleType:
     return _load_script("preview")
 
 
+@pytest.fixture(scope="session")
+def identities_script() -> ModuleType:
+    return _load_script("generate_identities")
+
+
 @pytest.fixture(autouse=True)
 def _clear_id_label_caches() -> Iterator[None]:
     """ID labels are cached per process (and log a missing ID once); every test

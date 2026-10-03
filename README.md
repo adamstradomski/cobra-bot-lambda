@@ -399,3 +399,32 @@ To compare all layouts in one go, label each with `--note`:
 ```bash
 uv run --env-file .env scripts/preview.py 5018 pairings --round 2 --format b2 --note "## B2 · DSS pairings, round 2"
 ```
+
+### `scripts/generate_identities.py` — short ID names from NetrunnerDB
+
+Regenerates [`src/cobra_bot/formatting/identities.py`](src/cobra_bot/formatting/identities.py), the map from an identity to its short name (embed format A-1 to A-3), from every Corp and Runner identity on [NetrunnerDB](https://netrunnerdb.com). Run it when NetrunnerDB has new identities (a new set), or after changing a short name. Do not edit `identities.py` by hand. Runs in the project environment (it uses `httpx`).
+
+```bash
+uv run scripts/generate_identities.py
+uv run scripts/generate_identities.py --check
+uv run scripts/generate_identities.py --input cards.json --stdout
+```
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--input FILE` | fetch | Read a saved NetrunnerDB v3 card list (JSON, one page) instead of fetching. |
+| `--output PATH` | `src/cobra_bot/formatting/identities.py` | File to write. |
+| `--check` | off | Write nothing; exit `1` if the file differs from what would be written (line endings ignored). |
+| `--stdout` | off | Print the module to stdout (UTF-8) instead of writing it. Not with `--check`. |
+
+**What it reads:** `GET https://api.netrunnerdb.com/api/v3/public/cards?filter[card_type_id]=corp_identity,runner_identity&page[size]=1000`, following `links.next` on the same host (at most 20 pages). No redirects are followed; 15 s timeout. A card that is not a well-formed identity is skipped on its own and counted.
+
+**How a short name is chosen:**
+
+- **Key:** the title before the first `:`, as Cobra writes it. NetrunnerDB has curly quotes where Cobra has straight ones (`René “Loup” Arcemont` → `René "Loup" Arcemont`), so curly quotes become straight; text is NFC-normalised.
+- **Override:** if the key is in `OVERRIDES` in the script, that name. It holds the initial mapping (A-3) and IDs whose derived name is too long, ambiguous or not what players call them (`New Angeles Sol` → `NA Sol`, `Near-Earth Hub` → `NEH`, `Virtual Intelligence, P.I.` → `Vic`).
+- **Derived otherwise:** Runner — the nickname in quotes, else the first word (after a leading `The `), comma dropped. Corp — the whole name if it fits in 9 columns, else without a leading `The `, else the first word. Anything still longer than 9 is cut with `…`.
+
+It prints a warning (and still writes) for a name it had to cut, two IDs on one side sharing a short name, and an override for an ID NetrunnerDB does not have. Fix them in `OVERRIDES` and run it again. `tests/scripts/test_generate_identities.py` checks that every override is in the committed file.
+
+**Exit codes:** `0` written, printed, or up to date with `--check`; `1` NetrunnerDB failed (network error, non-200, not JSON, a page without data, too many pages, a next page on another host), `--input` is not JSON, no identities found (the old file is kept), or `--check` found the file out of date; `2` invalid arguments or an unreadable `--input`.
