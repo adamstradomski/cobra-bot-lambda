@@ -12,7 +12,7 @@ All documentation, code comments, commit messages, and READMEs are written in En
 - Package/env manager: `uv`. Lint/format: `ruff`. Types: `mypy --strict`. Tests: `pytest`.
 - Runtime: AWS Lambda (InteractionsFunction + WorkerFunction), Discord HTTP interactions, AWS SAM, region `eu-central-1`.
 - Cache: Amazon S3 (shared), TTL 60 s.
-- Libraries: `httpx`, `PyNaCl`; `boto3` is provided by the Lambda runtime (dev dependency for tests and types only).
+- Libraries: `httpx`, `PyNaCl`, `Pillow` (reply images; imported only by the Worker, never by InteractionsFunction); `boto3` is provided by the Lambda runtime (dev dependency for tests and types only).
 
 ## Layout
 
@@ -22,9 +22,11 @@ src/cobra_bot/
   discord/      # signature verification, webhook client
   cobra/        # refs, HTTP client, cache logic, S3 store, JSON parser
   domain/       # models, round state, search — pure, no I/O
-  formatting/   # text, embeds, chunking — pure, no I/O
+  formatting/   # text, embeds, chunking, reply images — pure, no I/O
+  fonts/        # bundled Noto Sans for the images (SIL OFL)
   messages.py   # all user-facing strings
-scripts/        # capture_snapshots.py, anonymize_fixture.py, register_commands.py
+scripts/        # capture_snapshots.py, anonymize_fixture.py, register_commands.py,
+                #   aws_ops.py, preview.py, generate_identities.py
 tests/          # mirrors src/; anonymised fixtures in tests/fixtures/
 docs/           # requirements.md, spec.md, tasks.md, findings.md, acceptance.md
 template.yaml   # AWS SAM

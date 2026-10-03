@@ -3,6 +3,7 @@ channel webhook."""
 
 import io
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -15,11 +16,11 @@ from cobra_bot import messages
 from cobra_bot.discord.api import text_payload
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
-GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden"
 DSS = str(FIXTURES_DIR / "dss.json")
 WEBHOOK_TOKEN = "hook-secret_TOKEN-1"
 WEBHOOK_URL = f"https://discord.com/api/webhooks/123/{WEBHOOK_TOKEN}"
 ENV = {"DISCORD_PREVIEW_WEBHOOK_URL": WEBHOOK_URL}
+_PAYLOAD_JSON = re.compile(rb'name="payload_json"\r\n\r\n(.*?)\r\n--', re.DOTALL)
 
 
 def _http(status: int = 204) -> tuple[httpx.Client, list[httpx.Request]]:
@@ -49,6 +50,17 @@ def _dry_run(
     return payloads
 
 
+def _payload(request: httpx.Request) -> dict[str, object]:
+    """The JSON body, also from a multipart request (a reply with an image)."""
+    if request.headers["Content-Type"].startswith("multipart/form-data"):
+        match = _PAYLOAD_JSON.search(request.content)
+        assert match, "multipart request without payload_json"
+        payload: dict[str, object] = json.loads(match.group(1))
+        return payload
+    payload = json.loads(request.content)
+    return payload
+
+
 def _description(payloads: list[dict[str, object]]) -> str:
     embeds = payloads[0]["embeds"]
     assert isinstance(embeds, list)
@@ -59,18 +71,48 @@ def _description(payloads: list[dict[str, object]]) -> str:
 # --- what it renders ----------------------------------------------------------
 
 
-@pytest.mark.parametrize("command", ["standings", "pairings"])
-def test_dry_run_matches_the_production_golden_payloads(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], command: str
+@pytest.mark.parametrize(
+    "argv",
+    [["standings"], ["pairings"], ["pairings", "--round", "1"], ["player", "0029"]],
+)
+def test_dry_run_matches_what_the_worker_sends(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], argv: list[str]
 ) -> None:
-    """Same embeds as the Worker: the golden files are the production renderer's
-    output for the same fixture, tournament ID and fetch time."""
-    payloads = _dry_run(preview_script, capsys, [DSS, command, "--id", "5018"])
+    """Same messages as the bot: the Worker, run on the same export, sends the
+    same payloads (images and their attachments included)."""
+    from cobra_bot import fonts as bundled_fonts
+    from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache
+    from cobra_bot.commands import Command, Job
+    from cobra_bot.discord.api import WebhookClient
+    from cobra_bot.handlers.worker import WorkerApp
 
-    golden = json.loads(
-        (GOLDEN_DIR / f"{command}_dss.json").read_text(encoding="utf-8")
+    previewed = _dry_run(preview_script, capsys, [DSS, *argv, "--id", "5018"])
+
+    class Export:
+        def fetch_tournament(self, tournament_id: int) -> bytes:
+            return Path(DSS).read_bytes()
+
+        def resolve_shortcode(self, code: str) -> int:
+            raise AssertionError("not used")
+
+    http, seen = _http()
+    cache = TournamentCache(InMemoryCacheStore(), Export(), clock=lambda: FETCHED_AT)
+    worker = WorkerApp(
+        cache, lambda app_id: WebhookClient(http, app_id), bundled_fonts.load()
     )
-    assert payloads == golden
+    name = argv[0]
+    command = Command(
+        name,  # type: ignore[arg-type]
+        "5018",
+        round=int(argv[2]) if len(argv) > 2 else None,
+        query=argv[1] if name == "player" else None,
+    )
+    worker.handle(Job("app", "tok", command).to_payload())
+
+    sent = [_payload(r) for r in seen]
+    if command.ephemeral:  # the Worker's follow-ups carry the flag; webhooks cannot
+        sent = [{k: v for k, v in p.items() if k != "flags"} for p in sent]
+    assert previewed == sent
 
 
 def test_pairings_round_option_is_passed_on(
@@ -133,19 +175,17 @@ def test_stale_and_private_are_exclusive(preview_script: ModuleType) -> None:
 def test_dry_run_writes_utf8_whatever_the_console_encoding(
     preview_script: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The dss fixture has `Żółw` and `Maëlig`; a cp1250 console (Polish
-    Windows) cannot encode `ë`."""
+    """The dss fixture has `Maëlig`; a cp1250 console (Polish Windows) cannot
+    encode `ë`. Player cards carry names as text."""
     raw = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1250"))
 
     code = preview_script.main(
-        [DSS, "standings", "--dry-run"], env={}, clock=lambda: FETCHED_AT
+        [DSS, "player", "maelig", "--dry-run"], env={}, clock=lambda: FETCHED_AT
     )
 
     assert code == 0
-    out = raw.getvalue().decode("utf-8")
-    assert "Żółw" in out
-    assert "Maëlig" in out
+    assert "Maëlig" in raw.getvalue().decode("utf-8")
 
 
 # --- where the export comes from ----------------------------------------------
@@ -279,7 +319,7 @@ def test_posts_every_payload_to_the_webhook(
     assert [(r.method, str(r.url)) for r in seen] == [
         ("POST", f"https://discord.com/api/v10/webhooks/123/{WEBHOOK_TOKEN}")
     ] * len(expected)
-    assert [json.loads(r.content) for r in seen] == expected
+    assert [_payload(r) for r in seen] == expected
     assert WEBHOOK_TOKEN not in capsys.readouterr().err
 
 
@@ -356,217 +396,13 @@ def test_accepted_webhook_url_forms(preview_script: ModuleType, url: str) -> Non
     assert (webhook_id, token) == ("123", WEBHOOK_TOKEN)
 
 
-# --- formats under test (B1, B2, C) -------------------------------------------
-
-SSS = str(FIXTURES_DIR / "single_sided_top8.json")
+# --- images ---------------------------------------------------------------------
 
 
-def _walk(payload: object) -> list[dict[str, object]]:
-    """Every dict nested in a payload."""
-    found: list[dict[str, object]] = []
-    stack = [payload]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, dict):
-            found.append(item)
-            stack.extend(item.values())
-        elif isinstance(item, list):
-            stack.extend(item)
-    return found
-
-
-@pytest.fixture
-def default_font(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pillow's built-in font instead of a system font."""
-    from PIL import ImageFont
-
-    from cobra_bot.preview import image
-
-    font = ImageFont.load_default(image.FONT_SIZE)
-    monkeypatch.setattr(image, "load_fonts", lambda *_: image.Fonts(font, font))
-
-
-LARGE = str(FIXTURES_DIR / "large_top_cut.json")
-
-
-def test_b2_swaps_interactive_components_for_links(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A channel webhook rejects custom IDs and selects (HTTP 400)."""
-    (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", "b2", "--id", "5018"]
-    )
-
-    assert payload["flags"] == 1 << 15
-    nested = _walk(payload)
-    assert not [d for d in nested if "custom_id" in d or "options" in d]
-    buttons = [d for d in nested if d.get("type") == 2]
-    assert buttons
-    assert all(b["style"] == 5 for b in buttons)
-    assert {b["url"] for b in buttons} == {
-        "https://tournaments.nullsignal.games/tournaments/5018"
-    }
-
-
-def test_mockup_shows_the_select_as_one_button_with_the_chosen_round(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--round", "2", "--format", "b2"]
-    )
-
-    rounds = [d["label"] for d in _walk(payload) if "Round" in str(d.get("label"))]
-    assert rounds == ["Round 2 ▾"]
-
-
-def test_mockup_select_without_a_choice_shows_the_placeholder(
-    preview_script: ModuleType,
-) -> None:
-    select = {"type": 3, "custom_id": "r", "placeholder": "Pick", "options": []}
-    payload = {"components": [{"type": 1, "components": [select]}]}
-
-    mocked = preview_script.link_mockup(payload, "https://x.test")
-
-    (button,) = mocked["components"][0]["components"]
-    assert button["label"] == "Pick ▾"
-
-
-def test_mockup_keeps_the_component_count(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Discord caps a message at 40 components. The select once became one
-    button per round, and a 14-round tournament went over the cap (HTTP 400)."""
-    from cobra_bot.preview.components import component_count
-
-    real = _dry_run(
-        preview_script,
-        capsys,
-        [SSS, "pairings", "--round", "8", "--format", "b2", "--no-mockup"],
-    )
-    mocked = _dry_run(
-        preview_script, capsys, [SSS, "pairings", "--round", "8", "--format", "b2"]
-    )
-
-    assert [component_count(p) for p in mocked] == [component_count(p) for p in real]
-    assert all(component_count(p) <= 40 for p in mocked)
-
-
-def test_no_mockup_keeps_the_real_components(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", "b2", "--no-mockup"]
-    )
-
-    nested = _walk(payload)
-    assert any(d.get("custom_id") == "cobra:next" for d in nested)
-    assert any(d.get("custom_id") == "cobra:round" for d in nested)
-
-
-def test_v2_posts_ask_the_webhook_to_keep_components(
-    preview_script: ModuleType,
-) -> None:
+def test_images_are_posted_as_attachments(preview_script: ModuleType) -> None:
     http, seen = _http()
 
-    code = preview_script.main([DSS, "standings", "--format", "b2"], env=ENV, http=http)
-
-    assert code == 0
-    (request,) = seen
-    assert request.url.params["with_components"] == "true"
-
-
-def test_a_posts_do_not_set_with_components(preview_script: ModuleType) -> None:
-    http, seen = _http()
-
-    assert preview_script.main([DSS, "standings"], env=ENV, http=http) == 0
-
-    assert all("with_components" not in r.url.params for r in seen)
-
-
-def test_b1_is_gone(preview_script: ModuleType) -> None:
-    with pytest.raises(SystemExit) as exit_info:
-        preview_script.main([DSS, "standings", "--format", "b1", "--dry-run"])
-
-    assert exit_info.value.code == 2
-
-
-@pytest.mark.parametrize("layout", ["b2", "c"])
-def test_error_reply_is_the_bots_text_in_every_format(
-    preview_script: ModuleType,
-    capsys: pytest.CaptureFixture[str],
-    layout: str,
-    default_font: None,
-) -> None:
-    payloads = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--round", "99", "--format", layout]
-    )
-
-    assert payloads == [text_payload(messages.round_out_of_range(99, 3))]
-
-
-@pytest.mark.parametrize("layout", ["b2", "c"])
-def test_player_has_only_format_a(
-    preview_script: ModuleType,
-    capsys: pytest.CaptureFixture[str],
-    layout: str,
-    default_font: None,
-) -> None:
-    code = preview_script.main(
-        [DSS, "player", "Player", "--format", layout, "--dry-run"], env={}
-    )
-
-    assert code == 2
-    assert "pairings and standings" in capsys.readouterr().err
-
-
-def test_page_option_picks_one_page(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    every = _dry_run(
-        preview_script, capsys, [LARGE, "standings", "--format", "b2", "--all-pages"]
-    )
-    second = _dry_run(
-        preview_script, capsys, [LARGE, "standings", "--format", "b2", "--page", "2"]
-    )
-
-    assert len(every) > 1
-    assert second == [every[1]]
-
-
-def test_page_past_the_last_is_a_usage_error(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    code = preview_script.main(
-        [DSS, "pairings", "--format", "b2", "--page", "2", "--dry-run"], env={}
-    )
-
-    assert code == 2
-    assert "has 1 page(s)" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize("value", ["0", "-1", "x"])
-def test_page_must_be_a_positive_number(preview_script: ModuleType, value: str) -> None:
-    with pytest.raises(SystemExit) as exit_info:
-        preview_script.main([DSS, "standings", "--format", "b2", "--page", value])
-
-    assert exit_info.value.code == 2
-
-
-def test_page_and_all_pages_are_exclusive(preview_script: ModuleType) -> None:
-    with pytest.raises(SystemExit) as exit_info:
-        preview_script.main([DSS, "standings", "--page", "1", "--all-pages"])
-
-    assert exit_info.value.code == 2
-
-
-def test_c_posts_the_png_as_multipart(
-    preview_script: ModuleType, default_font: None
-) -> None:
-    http, seen = _http()
-
-    code = preview_script.main(
-        [SSS, "pairings", "--round", "1", "--format", "c"], env=ENV, http=http
-    )
+    code = preview_script.main([DSS, "pairings"], env=ENV, http=http)
 
     assert code == 0
     (request,) = seen
@@ -575,51 +411,67 @@ def test_c_posts_the_png_as_multipart(
     assert b"attachment://pairings-1.png" in request.content
 
 
-def test_save_images_writes_the_pngs(
-    preview_script: ModuleType,
-    capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
-    default_font: None,
-) -> None:
-    out = tmp_path / "png"
-
-    _dry_run(
-        preview_script,
-        capsys,
-        [DSS, "standings", "--format", "c", "--save-images", str(out)],
-    )
-
-    assert (out / "standings-1.png").read_bytes().startswith(b"\x89PNG")
-
-
-def test_missing_font_is_a_usage_error(
+def test_long_replies_send_every_page(
     preview_script: ModuleType,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from cobra_bot.preview import image
+    from cobra_bot.formatting import image
 
-    def no_font(*_: object) -> image.Fonts:
-        raise image.FontNotFound("no system font found; pass one with --font")
+    monkeypatch.setattr(image, "MAX_ROWS", 10)  # 31 players: 4 pages
 
-    monkeypatch.setattr(image, "load_fonts", no_font)
+    payloads = _dry_run(preview_script, capsys, [DSS, "standings"])
 
-    code = preview_script.main([DSS, "standings", "--format", "c", "--dry-run"], env={})
+    assert [p["attachments"] for p in payloads] == [
+        [{"id": 0, "filename": f"standings-{n}.png"}] for n in range(1, 5)
+    ]
 
-    assert code == 2
-    assert "--font" in capsys.readouterr().err
+
+def test_save_images_writes_the_pngs(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    out = tmp_path / "png"
+
+    _dry_run(preview_script, capsys, [DSS, "standings", "--save-images", str(out)])
+
+    assert (out / "standings-1.png").read_bytes().startswith(b"\x89PNG")
+
+
+def test_save_images_without_images_writes_nothing(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    out = tmp_path / "png"
+
+    _dry_run(preview_script, capsys, [DSS, "player", "0029", "--save-images", str(out)])
+
+    assert list(out.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "option", [["--format", "c"], ["--page", "2"], ["--all-pages"], ["--no-mockup"]]
+)
+def test_options_of_the_layout_trials_are_gone(
+    preview_script: ModuleType, option: list[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        preview_script.main([DSS, "standings", *option, "--dry-run"])
+
+    assert exit_info.value.code == 2
 
 
 def test_note_is_posted_first_as_plain_text(preview_script: ModuleType) -> None:
     http, seen = _http()
 
     code = preview_script.main(
-        [DSS, "standings", "--note", "## B2 @everyone"], env=ENV, http=http
+        [DSS, "standings", "--note", "## Standings @everyone"], env=ENV, http=http
     )
 
     assert code == 0
-    first, *rest = (json.loads(r.content) for r in seen)
-    assert first == {"content": "## B2 @everyone", "allowed_mentions": {"parse": []}}
+    first, *rest = (_payload(r) for r in seen)
+    assert first == {
+        "content": "## Standings @everyone",
+        "allowed_mentions": {"parse": []},
+    }
     assert rest
     assert all("embeds" in p for p in rest)
 
@@ -628,15 +480,13 @@ def test_rejected_post_prints_discords_reason_without_the_token(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, json={"components": ["0"]})
+        return httpx.Response(400, json={"attachments": ["0"]})
 
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
-    code = preview_script.main(
-        [DSS, "standings", "--format", "b2", "--no-mockup"], env=ENV, http=http
-    )
+    code = preview_script.main([DSS, "standings"], env=ENV, http=http)
 
     assert code == 1
     err = capsys.readouterr().err
-    assert '{"components":["0"]}' in err.replace(" ", "")
+    assert '{"attachments":["0"]}' in err.replace(" ", "")
     assert WEBHOOK_TOKEN not in err

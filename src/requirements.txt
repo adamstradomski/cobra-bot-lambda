@@ -16,6 +16,8 @@ idna==3.20
     # via
     #   anyio
     #   httpx
+pillow==12.3.0
+    # via cobra-bot
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pynacl==1.6.2

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = "==3.14.*"
 dependencies = [
     "httpx>=0.28.1",
+    "pillow>=12.3.0",
     "pynacl>=1.6.2",
 ]
 
@@ -52,7 +53,6 @@ filterwarnings = ["error"]
 dev = [
     "boto3>=1.43.107",
     "mypy>=2.3.1",
-    "pillow>=12.3.0",
     "pytest>=9.1.1",
     "pyyaml>=6.0.3",
     "ruff>=0.16.10",

@@ -9,15 +9,19 @@ import httpx
 import pytest
 
 from builders import FETCHED_AT, fixture_bytes
+from cobra_bot import fonts as bundled_fonts
 from cobra_bot.cobra.cache import Fetcher, InMemoryCacheStore, TournamentCache
 from cobra_bot.cobra.client import CobraClient
 from cobra_bot.commands import Command, Job
 from cobra_bot.discord.api import WebhookClient
+from cobra_bot.formatting import image
 from cobra_bot.handlers.worker import WorkerApp
 
 COBRA = "https://tournaments.nullsignal.games"
 WEBHOOK = "https://discord.com/api/v10/webhooks/app-1/tok-1"
 FIXTURES = {4909: "single_sided_top8", 4990: "large_top_cut", 5018: "dss"}
+FONTS = bundled_fonts.load()  # read-only, shared by every test
+_PAYLOAD_JSON = re.compile(rb'name="payload_json"\r\n\r\n(.*?)\r\n--', re.DOTALL)
 
 
 def _cobra(request: httpx.Request) -> httpx.Response:
@@ -40,7 +44,18 @@ class Discord:
         return httpx.Response(self.status)
 
     def calls(self) -> list[tuple[str, str, dict[str, object]]]:
-        return [(r.method, str(r.url), json.loads(r.content)) for r in self.requests]
+        return [(r.method, str(r.url), _payload(r)) for r in self.requests]
+
+
+def _payload(request: httpx.Request) -> dict[str, object]:
+    """The JSON body, also from a multipart request (a reply with an image)."""
+    if request.headers["Content-Type"].startswith("multipart/form-data"):
+        match = _PAYLOAD_JSON.search(request.content)
+        assert match, "multipart request without payload_json"
+        payload: dict[str, object] = json.loads(match.group(1))
+        return payload
+    payload = json.loads(request.content)
+    return payload
 
 
 def _worker(discord: Discord, fetcher: Fetcher | None = None) -> WorkerApp:
@@ -51,7 +66,7 @@ def _worker(discord: Discord, fetcher: Fetcher | None = None) -> WorkerApp:
         clock=lambda: FETCHED_AT,
     )
     discord_http = httpx.Client(transport=httpx.MockTransport(discord))
-    return WorkerApp(cache, lambda app_id: WebhookClient(discord_http, app_id))
+    return WorkerApp(cache, lambda app_id: WebhookClient(discord_http, app_id), FONTS)
 
 
 def _job(command: Command) -> dict[str, object]:
@@ -66,20 +81,31 @@ def test_pairings_end_to_end() -> None:
     ((method, url, payload),) = discord.calls()
     assert (method, url) == ("PATCH", f"{WEBHOOK}/messages/@original")
     assert payload["allowed_mentions"] == {"parse": []}
+    assert payload["attachments"] == [{"id": 0, "filename": "pairings-1.png"}]
     embed = payload["embeds"][0]  # type: ignore[index]
     assert embed["title"] == "DSS Fixture"
     assert embed["description"].startswith("**Round 3 pairings — in progress**")
+    assert embed["image"] == {"url": "attachment://pairings-1.png"}
+    (request,) = discord.requests
+    assert b'name="files[0]"; filename="pairings-1.png"' in request.content
+    assert b"Content-Type: image/png" in request.content
 
 
-def test_standings_end_to_end_with_follow_ups() -> None:
+def test_standings_end_to_end_with_follow_ups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pages of 10 rows: 46 players fill the 5 messages without drawing 235."""
+    monkeypatch.setattr(image, "MAX_ROWS", 10)
     discord = Discord()
 
-    _worker(discord).handle(_job(Command("standings", "4990")))
+    _worker(discord).handle(_job(Command("standings", "4909")))
 
     calls = discord.calls()
-    assert [c[0] for c in calls] == ["PATCH"] + ["POST"] * (len(calls) - 1)
-    assert len(calls) > 1
+    assert [c[0] for c in calls] == ["PATCH", "POST", "POST", "POST", "POST"]
     assert all("flags" not in payload for _, _, payload in calls)
+    assert [p["attachments"] for _, _, p in calls] == [
+        [{"id": 0, "filename": f"standings-{n}.png"}] for n in range(1, 6)
+    ]
 
 
 def test_player_end_to_end() -> None:

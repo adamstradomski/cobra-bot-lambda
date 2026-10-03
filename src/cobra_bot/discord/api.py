@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from cobra_bot.formatting.chunking import FIELD_NAME, Embed, Message
+from cobra_bot.formatting.chunking import FIELD_NAME, Embed, ImagePage, Message
 from cobra_bot.formatting.document import EMBED_COLOR
 
 DISCORD_API = "https://discord.com/api/v10"
@@ -54,7 +54,11 @@ def make_http_client() -> httpx.Client:
 
 
 def embed_payload(embed: Embed) -> Payload:
-    payload: Payload = {"description": embed.description}
+    """Discord rejects an empty description, so an empty one is left out (an
+    image page after the first has none)."""
+    payload: Payload = {}
+    if embed.description:
+        payload["description"] = embed.description
     if embed.title is not None:
         payload["title"] = embed.title
     if embed.url is not None:
@@ -66,6 +70,8 @@ def embed_payload(embed: Embed) -> Payload:
             {"name": FIELD_NAME, "value": value, "inline": False}
             for value in embed.fields
         ]
+    if embed.image is not None:
+        payload["image"] = {"url": f"attachment://{embed.image}"}
     if embed.footer is not None:
         payload["footer"] = {"text": embed.footer}
     return payload
@@ -79,6 +85,17 @@ def message_payload(embeds: Sequence[Embed], *, ephemeral: bool = False) -> Payl
     if ephemeral:
         payload["flags"] = EPHEMERAL
     return payload
+
+
+def image_payload(page: ImagePage, *, ephemeral: bool = False) -> Payload:
+    """The embed of an image page, with its PNG declared as attachment 0."""
+    payload = message_payload([page.embed], ephemeral=ephemeral)
+    payload["attachments"] = [{"id": 0, "filename": page.filename}]
+    return payload
+
+
+def image_file(page: ImagePage) -> Attachment:
+    return Attachment(page.filename, page.png, "image/png")
 
 
 def text_payload(text: str) -> Payload:
@@ -112,25 +129,33 @@ class WebhookClient:
             else:
                 self.follow_up(token, message_payload(message, ephemeral=ephemeral))
 
+    def send_images(
+        self, token: str, pages: Sequence[ImagePage], *, ephemeral: bool
+    ) -> None:
+        """Like `send`, one page per message, each with its PNG attached."""
+        for index, page in enumerate(pages):
+            files = (image_file(page),)
+            if index == 0:
+                self.edit_original(token, image_payload(page), files=files)
+            else:
+                payload = image_payload(page, ephemeral=ephemeral)
+                self.follow_up(token, payload, files=files)
+
     def send_text(self, token: str, text: str) -> None:
         """`text_payload` in place of the deferral."""
         self.edit_original(token, text_payload(text))
 
-    def edit_original(self, token: str, payload: Payload) -> None:
-        self._request("PATCH", f"{self._webhook(token)}/messages/@original", payload)
+    def edit_original(
+        self, token: str, payload: Payload, *, files: Sequence[Attachment] = ()
+    ) -> None:
+        url = f"{self._webhook(token)}/messages/@original"
+        self._request("PATCH", url, payload, files)
 
     def follow_up(
-        self,
-        token: str,
-        payload: Payload,
-        *,
-        files: Sequence[Attachment] = (),
-        with_components: bool = False,
+        self, token: str, payload: Payload, *, files: Sequence[Attachment] = ()
     ) -> None:
-        """`files` are sent as `files[n]` next to the payload (multipart);
-        `with_components` lets a channel webhook post Components V2."""
-        params = {"with_components": "true"} if with_components else None
-        self._request("POST", self._webhook(token), payload, files, params)
+        """`files` are sent as `files[n]` next to the payload (multipart)."""
+        self._request("POST", self._webhook(token), payload, files)
 
     def _webhook(self, token: str) -> str:
         return f"{self._base_url}/webhooks/{self._application_id}/{token}"
@@ -141,7 +166,6 @@ class WebhookClient:
         url: str,
         payload: Payload,
         files: Sequence[Attachment] = (),
-        params: dict[str, str] | None = None,
     ) -> None:
         for _ in range(MAX_RATE_LIMIT_RETRIES + 1):
             try:
@@ -149,7 +173,6 @@ class WebhookClient:
                     response = self._http.request(
                         method,
                         url,
-                        params=params,
                         data={"payload_json": json.dumps(payload)},
                         files=[
                             (f"files[{n}]", (a.filename, a.content, a.content_type))
@@ -157,9 +180,7 @@ class WebhookClient:
                         ],
                     )
                 else:
-                    response = self._http.request(
-                        method, url, params=params, json=payload
-                    )
+                    response = self._http.request(method, url, json=payload)
             except httpx.HTTPError as err:
                 raise DiscordError(f"{method} failed: {type(err).__name__}") from None
             if response.status_code != 429:

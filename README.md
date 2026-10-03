@@ -8,9 +8,9 @@ Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned 
 
 | Command | What it does |
 |---------|--------------|
-| `uv sync` | Creates `.venv` and installs the project and its dev tools (pytest, ruff, mypy, and Pillow for `scripts/preview.py`) at the versions locked in `uv.lock`. |
+| `uv sync` | Creates `.venv` and installs the project (including Pillow, which draws the reply images) and its dev tools (pytest, ruff, mypy) at the versions locked in `uv.lock`. |
 | `uv run pytest` | Runs the tests in `tests/`. Configured in `pyproject.toml`: warnings are errors, unknown markers and config keys fail the run. Exits non-zero if any test fails. |
-| `UPDATE_GOLDEN=1 uv run pytest tests/formatting/test_golden.py` | Rewrites the golden files in `tests/golden/` (the full Discord payloads for the `single_sided_top8` and `dss` fixtures) from the current renderer instead of comparing against them. Review the diff before committing; without the variable the test fails on any difference. |
+| `UPDATE_GOLDEN=1 uv run pytest tests/formatting/test_golden.py` | Rewrites the golden files in `tests/golden/` (the code-block embed payloads of the standings and pairings formatters for the `single_sided_top8` and `dss` fixtures; the bot now sends these two as images, and player cards use the same rows) from the current renderer instead of comparing against them. Review the diff before committing; without the variable the test fails on any difference. |
 | `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
@@ -336,7 +336,7 @@ uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--s
 
 ### `scripts/preview.py` — see a reply in Discord without deploying
 
-Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the formatters, `message_payload`), so the embeds are byte for byte the ones the bot sends; `tests/scripts/test_preview.py` checks them against the golden files. It runs in the project environment, so it uses your working copy of `cobra_bot`.
+Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings` and `standings`, a text embed for `player`. `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
 
 ```bash
 uv run --env-file .env scripts/preview.py SOURCE pairings [--round N] [OPTIONS]
@@ -350,20 +350,15 @@ Options go after the subcommand, e.g. `scripts/preview.py 5018 pairings --round 
 |-------------------|---------|---------|
 | `SOURCE` | — | A tournament ID: the newest `snapshots/{ID}/{ts}.json` (not `*.meta.json`), written by `capture_snapshots.py`. Or a path to a Cobra export, e.g. `tests/fixtures/dss.json`. |
 | `pairings [--round N]` / `standings` / `player QUERY` | — | Same subcommands and options as `/cobra`. Without `--round`, the latest round. |
-| `--dry-run` | off | Print the JSON payloads to stdout (UTF-8) instead of posting them. Needs no webhook. |
+| `--dry-run` | off | Print the JSON payloads to stdout (UTF-8) instead of posting them. Needs no webhook. Images are not printed; use `--save-images`. |
 | `--stale` | off | Render as stale data with Cobra unavailable (the cached copy is 10 minutes old). |
 | `--private` | off | Render as stale data because the tournament became private. Not with `--stale`. |
 | `--id N` | from `SOURCE` | Tournament ID used in the Cobra links. Default: `SOURCE` itself, or the name of the export's directory if it is a number, else `1`. Must be positive. |
-| `--format a\|b2\|c` | `a` | Reply layout; see [Layouts under test](#layouts-under-test) below. `a` is the bot's reply. |
-| `--page N` | `1` | `b2`, `c`: which page to post. A page past the last is an error (exit `2`). |
-| `--all-pages` | off | `b2`, `c`: post every page. Not with `--page`. |
-| `--no-mockup` | off | `b2`: keep the real buttons and select. A channel webhook rejects them (exit `1`, `Discord: {"components": …}`); useful with `--dry-run`. |
-| `--font PATH` / `--bold-font PATH` | a system font | `c`: TrueType fonts for the image. Default: Segoe UI (Windows), DejaVu Sans (Linux), Arial (macOS). `--bold-font` defaults to `--font`. |
-| `--save-images DIR` | — | `c`: also write the PNGs into `DIR` (created if missing), also with `--dry-run`. |
+| `--save-images DIR` | — | Also write the PNGs into `DIR` (created if missing), also with `--dry-run`. |
 | `--note TEXT` | — | Post `TEXT` as a plain message first (markdown works, mentions never ping), to label what follows. |
 | `DISCORD_PREVIEW_WEBHOOK_URL` | — | Channel webhook URL, `https://discord.com/api/webhooks/<id>/<token>`. Required without `--dry-run`. It contains a secret token and is never printed. |
 
-**Local data.** The snapshots of a single-sided (4909) and a double-sided (5018) tournament are in `snapshots/` (see `snapshots/README.md`). For another tournament, capture it once:
+**Local data.** The snapshots of a single-sided (4909) and a double-sided (5018) tournament are in `snapshots/` (see `snapshots/README.md`); `5018 pairings --round 2` is a double-sided round with results. For another tournament, capture it once:
 
 ```bash
 uv run scripts/capture_snapshots.py <ID> --once
@@ -374,31 +369,11 @@ uv run scripts/capture_snapshots.py <ID> --once
 1. On your test server: **Server Settings → Integrations → Webhooks → New Webhook**, pick the channel, and optionally give it the bot's name and avatar so the messages look like the bot's. **Copy Webhook URL**.
 2. Put it into `.env` in the repository root (git-ignored), one line: `DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…`. `uv run --env-file .env` loads it, and stops with `No environment file found` if the file is missing. Setting the variable in your shell and dropping `--env-file .env` works too.
 
-**How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Channel webhooks cannot post ephemeral messages, so `player` replies are public in the preview (the script says so on stderr). Discord applies the same embed limits and rendering to both.
+**How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Channel webhooks cannot post ephemeral messages, so `player` replies are public in the preview (the script says so on stderr). Discord applies the same embed and attachment rules to both.
 
-It prints one line to stderr when done, e.g. `preview: standings of 20261001T160955Z.json in format A sent as 2 message(s) in 420 ms` (the count includes the `--note` message). Warnings from the formatters (such as an identity missing from the short-name map) are printed too.
+It prints one line to stderr when done, e.g. `preview: standings of 20261001T160955Z.json sent as 2 message(s) in 420 ms` (the count includes the `--note` message). Warnings from the formatters (such as an identity missing from the short-name map) are printed too.
 
-**Exit codes:** `0` posted, or printed with `--dry-run`; `1` Discord rejected a post or could not be reached (HTTP status or error type is printed, with the start of Discord's error body, never the URL); `2` invalid arguments, no snapshot for the ID, an unreadable `SOURCE`, `DISCORD_PREVIEW_WEBHOOK_URL` missing or not a webhook URL, a `--page` past the last page, `--format b2`/`c` with `player`, or no usable font for `c`.
-
-#### Layouts under test
-
-`--format` picks how the reply looks. Only `a` is what the bot sends; the others live in [`src/cobra_bot/preview/`](src/cobra_bot/preview/), which the bot never imports (`tests/preview/test_isolation.py`), and are shown only here until one is chosen.
-
-| Format | What it posts | Commands |
-|--------|---------------|----------|
-| `a` | The bot's embeds: a table in an `ansi` code block, coloured on desktop, plain on mobile (Discord's mobile app drops ANSI colours). | all |
-| `b2` | A Components V2 container in the bot colour, in plain markdown that looks the same on desktop and mobile (no code block, no ANSI colours). Built to look like `c`: 🔵 / 🟣 mark the Corp and Runner IDs; ranks and table numbers sit in padded inline code, like a column; in standings a divider separates the points groups. Standings: the rank and name in bold, then a small grey line with the IDs, the points and the SoS. Pairings: one line per player, the Corp first, the winner in bold, with the ID and points; double-sided, the round total, then a grey line with both games. Below: **Prev / 1 / 3 / Next / Refresh** and, for pairings, a round select. Pages keep to Discord's 4000 characters and 40 components. | pairings, standings |
-| `c` | The table as a PNG in an embed: full colours, real columns with headings (standings: #, player, Corp, Runner, points, SoS), no cut names; the text cannot be selected. At most 40 rows per image, one message per page. | pairings, standings |
-
-**The controls are a mockup.** Channel webhooks may post only non-interactive components (Discord answers `HTTP 400 {"components": ["0"]}` otherwise), and nothing handles clicks yet. The preview therefore turns every button into a link button with the same label (it opens the tournament on Cobra), and the round select into one link button showing the chosen round, `Round 2 ▾`. The mockup keeps the real message's component count, so a page that fits the 40-component cap still fits. `--no-mockup --dry-run` prints the real components the bot would send.
-
-**Requirements for `c`:** [Pillow](https://pypi.org/project/pillow/), a dev dependency (`uv sync` installs it; it is not in `src/requirements.txt`, so it never reaches Lambda), and a font with Latin Extended glyphs; Pillow's built-in font has none of `Żółw`.
-
-To compare all layouts in one go, label each with `--note`:
-
-```bash
-uv run --env-file .env scripts/preview.py 5018 pairings --round 2 --format b2 --note "## B2 · DSS pairings, round 2"
-```
+**Exit codes:** `0` posted, or printed with `--dry-run`; `1` Discord rejected a post or could not be reached (HTTP status or error type is printed, with the start of Discord's error body, never the URL); `2` invalid arguments, no snapshot for the ID, an unreadable `SOURCE`, or `DISCORD_PREVIEW_WEBHOOK_URL` missing or not a webhook URL.
 
 ### `scripts/generate_identities.py` — short ID names from NetrunnerDB
 

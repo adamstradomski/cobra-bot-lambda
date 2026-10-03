@@ -34,13 +34,13 @@ The bot is public. It can be added to any Discord server (server install) and by
 | FR-05 | Must | Both single-sided Swiss (one game per round) and double-sided Swiss (two games per round) are supported. |
 | FR-06 | Must | Slash command `/cobra standings <tournament>` posts standings publicly, stating after which round they apply. If no round is complete yet, it says "No completed rounds yet" and lists the players in the order Cobra gives them (`rank`). |
 | FR-07 | Must | Each standings row shows: rank, player name, match points, Strength of Schedule (SoS), Corp ID and Runner ID. |
-| FR-08 | Must | IDs are displayed in short form: the text before the first `:`, mapped to a short name of at most 9 columns (e.g. "Nuvem SA: Law of the Land" → "Nuvem", "Haas-Bioroid: Precision Design" → "HB"), with a fallback for IDs missing from the map (SPEC §9; `docs/embeded_format.md` A-1–A-4). |
+| FR-08 | Must | IDs are displayed in short form: the text before the first `:`, mapped to a short name of at most 9 columns (e.g. "Nuvem SA: Law of the Land" → "Nuvem", "Haas-Bioroid: Precision Design" → "HB"), with a fallback for IDs missing from the map (SPEC §9; `docs/embeded_format.md` A-1–A-4). The standings and pairings images have room for more and show the text before the `:` (cut at 24 characters). |
 | FR-09 | Must | Slash command `/cobra player <tournament> <query>` replies privately (ephemeral). Matching is a substring match that ignores letter case and diacritics (e.g. `maelig` matches "Maëlig", `zolw` matches "Żółw"). |
 | FR-10 | Must | Player search returns up to 3 matches, ordered by rank; if more exist, it says how many more matched. Each match shows rank, points, SoS, IDs and the player's pairing in the latest Swiss round (table, opponent, role, result) or bye. If a top cut is in progress, the reply notes that top cut pairings are not supported yet. |
 | FR-11 | Must | `<tournament>` accepts a numeric ID or a Cobra URL (any page under `/tournaments/{id}/…`). |
 | FR-12 | Should | `<tournament>` also accepts a shortcode (e.g. `HBYM`), if Cobra offers a reliable way to resolve it (see T01). |
 | FR-13 | Must | If the tournament has not started (no rounds), the bot says so. |
-| FR-14 | Must | Output uses Discord embeds. Long output is split across up to 5 messages; if it does not fit, the last message says how many entries were omitted and links to the full page on Cobra. |
+| FR-14 | Must | Output uses Discord embeds; standings and pairings show their table as an image in the embed (decided 2026-10-03, SPEC §9). Long output is split across up to 5 messages; if it does not fit, the last message says how many entries were omitted and links to the full page on Cobra. |
 | FR-15 | Must | If Cobra is unavailable, the bot shows the last cached data with a note stating when it was fetched. If no cached data exists, it shows an error. |
 | FR-16 | Must | Clear user-facing errors for: invalid tournament reference, tournament not found, tournament private (without cache), round out of range, Cobra unavailable without cache. |
 | FR-17 | Must | All bot responses are in English. |

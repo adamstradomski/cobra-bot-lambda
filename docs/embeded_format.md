@@ -23,6 +23,8 @@ Priorities: **MUST** / **SHOULD** / **COULD**. Unconfirmed decisions are marked 
 - Standings show IDs on a second line; pairings show the points each player scored instead of a score from the Corp's side, and have no column header.
 - Double-sided pairings show the two games as columns instead of `↳` lines.
 
+**Changes in v4 (2026-10-03):** standings and pairings are drawn as a **PNG image** in the embed (§7). Sections 1–3 still describe the code-block tables, which player cards (§4) use. The image layout was chosen after trying it in Discord with `scripts/preview.py` against an embed with Components V2 controls and a plain-markdown layout.
+
 **Changes from v2:** standings narrow to **22 columns** with **3 lines per player** and no header row: rank, name and points; Corp ID and SoS; Runner ID. Pairings keep the 34-column limit.
 
 ---
@@ -179,3 +181,20 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 - Dropped players (S-7). eSoS (S-8).
 - Exact Cobra API format for results and top cut beyond what `docs/findings.md` answers.
 - Wording of empty states (C-12).
+
+## 7. Images (standings and pairings, v4)
+
+| ID | Priority | Requirement |
+|----|----------|-------------|
+| I-1 | MUST | Standings and pairings show their table as a PNG attached to the message and shown in the embed (`image.url = attachment://{name}-{n}.png`). One image per message. |
+| I-2 | MUST | The embed keeps C-1 to C-3: the first message has the title, the Cobra link and the header (status line, top-cut note, `Data from <t:…:R>` or the stale notice). Later messages have no title or description. |
+| I-3 | MUST | Every embed has a legend in the footer: `Round 8 · 46 players` / `Round 8 · 23 tables`, plus `N / M` when there are several pages. Column headings in the image make a key unnecessary. |
+| I-4 | MUST | Columns with headings. Standings: `#`, Player, Corp, Runner, Pts, SoS — IDs before points and SoS. Single-sided pairings: Table, Player, Side, ID, Pts, two rows per table, the Corp first. Double-sided: Table, Player, Game 1 (`C`/`R` tag + ID, points), Game 2, Total; seat 1 (the Corp in game 1) first. Bye: `BYE` in the third column. |
+| I-5 | MUST | Colours on Discord's dark theme background `#2b2d31`: text `#dbdee1`, secondary `#949ba4` (SoS, losers, unknown ID `—`, headings), points `#f0b232`, Corp `#7998ec`, Runner `#dd4847`. Corp and Runner follow NSG's card backs (blue and red); the navy is lightened to be readable. |
+| I-6 | MUST | Winners bold, losers secondary; equal points, an intentional draw (`ID`) or no result (`–`) leave both plain. Standings names and points bold. |
+| I-7 | MUST | Alternate rows get a background stripe per group: a group of players on equal points (standings), a table (pairings). |
+| I-8 | MUST | Names cut at 28 characters, IDs (text before `:`) at 24, with `…`; control characters dropped, as for code blocks (C-7). |
+| I-9 | MUST | At most 40 rows per image. Standings fill every page (a points group may continue on the next one); a table is never split. At most 5 messages; past them, the last description ends with `…and N more — [full list on Cobra](url)`, N counting players or tables. |
+| I-10 | MUST | Text in the bundled Noto Sans Regular/Bold (SIL OFL, `src/cobra_bot/fonts/`): Lambda has no system fonts, and Pillow's built-in font lacks Latin Extended letters (`Żółw`). Drawn at twice the display size so text stays sharp when Discord scales it. |
+| I-11 | MUST | InteractionsFunction never imports Pillow (it must answer within 3 s); only the Worker draws images (`tests/handlers/test_import_cost.py`). |
+| I-12 | SHOULD | Text in an image cannot be selected or searched; the Cobra link in the title gives the selectable version. |
