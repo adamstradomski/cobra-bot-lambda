@@ -479,3 +479,20 @@ def test_rejected_post_prints_discords_reason_without_the_token(
     err = capsys.readouterr().err
     assert '{"attachments":["0"]}' in err.replace(" ", "")
     assert WEBHOOK_TOKEN not in err
+
+
+def test_webhook_url_comes_from_the_env_file(
+    preview_script: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DISCORD_PREVIEW_WEBHOOK_URL={WEBHOOK_URL}\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(preview_script, "ENV_FILE", env_file)
+    monkeypatch.delenv("DISCORD_PREVIEW_WEBHOOK_URL", raising=False)
+    http, seen = _http()
+
+    assert preview_script.main([DSS, "pairings", "--round", "99"], http=http) == 0
+
+    (request,) = seen
+    assert str(request.url).endswith(f"/webhooks/123/{WEBHOOK_TOKEN}")

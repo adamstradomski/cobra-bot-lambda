@@ -14,7 +14,7 @@ Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.14 (pinned 
 | `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
-| `uv run --env-file .env scripts/preview.py 5018 pairings` | Posts a reply rendered from a local export to your Discord test channel, without deploying; see [`preview.py`](#scriptspreviewpy--see-a-reply-in-discord-without-deploying). |
+| `uv run scripts/preview.py 5018 pairings` | Posts a reply rendered from a local export to your Discord test channel, without deploying; see [`preview.py`](#scriptspreviewpy--see-a-reply-in-discord-without-deploying). |
 
 All four checks must pass before a change is merged. GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs them on every push and pull request, after `uv sync --locked`, which fails if `uv.lock` is out of date with `pyproject.toml`; it then runs `sam validate --lint` and `sam build`. On `main`, a successful CI run triggers the deploy workflow ([Automatic deployment from main](#automatic-deployment-from-main)).
 
@@ -100,14 +100,17 @@ Developer Portal → **General Information** → **Interactions Endpoint URL**: 
 
 ### 5. Register the `/cobra` command
 
-```bash
-DISCORD_APPLICATION_ID=… DISCORD_BOT_TOKEN=… uv run scripts/register_commands.py
+Put the Application ID and the bot token into `.env` in the repository root (git-ignored; see [Local settings: `.env`](#local-settings-env)):
+
+```
+DISCORD_APPLICATION_ID=…
+DISCORD_BOT_TOKEN=…
 ```
 
-PowerShell:
+Then:
 
-```powershell
-$env:DISCORD_APPLICATION_ID = "…"; $env:DISCORD_BOT_TOKEN = "…"; uv run scripts/register_commands.py
+```bash
+uv run scripts/register_commands.py
 ```
 
 See [`register_commands.py`](#scriptsregister_commandspy--register-the-cobra-command-with-discord-t22) for options and exit codes. Global commands can take a while to show up in Discord clients. Run it again only when the command definition changes.
@@ -195,6 +198,18 @@ One-time setup:
 Manual `sam deploy` from your machine still works. After step 5 the stack uses `cfn-exec-cobra-bot` for every update, so your own deploys also need permission to pass that role (`iam:PassRole`). An administrator has it.
 
 ## Scripts
+
+### Local settings: `.env`
+
+`scripts/register_commands.py` and `scripts/preview.py` read `.env` in the repository root (git-ignored, never deployed), so credentials stay out of the shell history:
+
+```
+DISCORD_APPLICATION_ID=123456789012345678
+DISCORD_BOT_TOKEN=…
+DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…
+```
+
+One `KEY=VALUE` per line; blank lines and lines starting with `#` are skipped; `export ` before the key and quotes around the value are allowed. `#` inside a value is part of it, and nothing is expanded. A variable set in the shell wins over the file. A missing file is fine; a line that is not `KEY=VALUE` is skipped with a warning naming its line number (never its content). Read by `src/cobra_bot/envfile.py`; the Lambda functions never read it.
 
 ### `scripts/capture_snapshots.py` — capture raw Cobra snapshots (T01)
 
@@ -294,8 +309,8 @@ uv run scripts/register_commands.py
 | Option / variable | Meaning |
 |-------------------|---------|
 | `--dry-run` | Print the JSON payload to stdout and exit. Sends nothing and needs no credentials. |
-| `DISCORD_APPLICATION_ID` | Application ID (Developer Portal → General Information). Required without `--dry-run`. |
-| `DISCORD_BOT_TOKEN` | Bot token (Developer Portal → Bot), used only for this API call. Required without `--dry-run`. It is never printed and never deployed to AWS. Keep it out of shell history and the repository, e.g. in a password manager or a local `.env` file (git-ignored). |
+| `DISCORD_APPLICATION_ID` | Application ID (Developer Portal → General Information). Required without `--dry-run`. Read from the environment, else from `.env` ([Local settings](#local-settings-env)). |
+| `DISCORD_BOT_TOKEN` | Bot token (Developer Portal → Bot), used only for this API call. Required without `--dry-run`. It is never printed and never deployed to AWS. Keep it out of shell history and the repository: put it in `.env` (git-ignored), which the script reads ([Local settings](#local-settings-env)). |
 
 What it does: one `PUT https://discord.com/api/v10/applications/{id}/commands` request. Global commands can take a while to appear in Discord clients.
 
@@ -339,9 +354,9 @@ uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--s
 Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings`, `standings` and `player` (a one-sentence text embed when nothing matches or for an error). `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
 
 ```bash
-uv run --env-file .env scripts/preview.py SOURCE pairings [--round N] [OPTIONS]
-uv run --env-file .env scripts/preview.py SOURCE standings [OPTIONS]
-uv run --env-file .env scripts/preview.py SOURCE player QUERY [OPTIONS]
+uv run scripts/preview.py SOURCE pairings [--round N] [OPTIONS]
+uv run scripts/preview.py SOURCE standings [OPTIONS]
+uv run scripts/preview.py SOURCE player QUERY [OPTIONS]
 ```
 
 Options go after the subcommand, e.g. `scripts/preview.py 5018 pairings --round 2 --stale`.
@@ -367,7 +382,7 @@ uv run scripts/capture_snapshots.py <ID> --once
 **One-time setup.**
 
 1. On your test server: **Server Settings → Integrations → Webhooks → New Webhook**, pick the channel, and optionally give it the bot's name and avatar so the messages look like the bot's. **Copy Webhook URL**.
-2. Put it into `.env` in the repository root (git-ignored), one line: `DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…`. `uv run --env-file .env` loads it, and stops with `No environment file found` if the file is missing. Setting the variable in your shell and dropping `--env-file .env` works too.
+2. Put it into `.env` in the repository root (git-ignored), one line: `DISCORD_PREVIEW_WEBHOOK_URL=https://discord.com/api/webhooks/…`. The script reads it ([Local settings](#local-settings-env)).
 
 **How it differs from the bot.** Every message is a new post; the bot edits its "thinking…" reply for the first message and posts the rest as follow-ups, which looks the same. The author is the webhook's name and avatar. Discord applies the same embed and attachment rules to both.
 

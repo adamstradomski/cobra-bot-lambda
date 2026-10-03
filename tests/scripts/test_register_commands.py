@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import ModuleType
 
 import httpx
@@ -98,3 +99,24 @@ def test_blank_credentials_are_a_usage_error(register_script: ModuleType) -> Non
 
     assert register_script.main([], env=env, http=http) == 2
     assert seen == []
+
+
+def test_credentials_come_from_the_env_file(
+    register_script: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without `env`, the script reads `.env`; the shell's variables win."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DISCORD_APPLICATION_ID=from-file\nDISCORD_BOT_TOKEN=file-token\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(register_script, "ENV_FILE", env_file)
+    monkeypatch.delenv("DISCORD_APPLICATION_ID", raising=False)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "shell-token")
+    http, seen = _http()
+
+    assert register_script.main([], http=http) == 0
+
+    (request,) = seen
+    assert "/applications/from-file/" in str(request.url)
+    assert request.headers["Authorization"] == "Bot shell-token"
