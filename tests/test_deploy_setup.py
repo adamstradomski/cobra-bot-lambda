@@ -128,11 +128,15 @@ def test_role_statements_are_scoped(bootstrap: Document, role: str) -> None:
         assert "*" not in _resources(statement), statement["Sid"]
 
 
+# Statements on AWS-owned resources, which cannot carry the app stack's name.
+AWS_OWNED = {("CloudFormationExecutionRole", "SamTransform")}
+
+
 def test_execution_role_resources_are_named_after_the_app_stack(
     bootstrap: Document,
 ) -> None:
     for statement in _statements(bootstrap, "CloudFormationExecutionRole"):
-        if ("CloudFormationExecutionRole", statement["Sid"]) in UNSCOPED:
+        if ("CloudFormationExecutionRole", statement["Sid"]) in UNSCOPED | AWS_OWNED:
             continue
         for resource in _resources(statement):
             assert "${AppStackName}" in resource, statement["Sid"]
@@ -170,6 +174,24 @@ def test_pass_role_is_limited_to_one_service(
     assert [s["Condition"]["StringEquals"]["iam:PassedToService"] for s in passing] == [
         service
     ]
+
+
+@pytest.mark.parametrize("role", ["GitHubDeployRole", "CloudFormationExecutionRole"])
+def test_role_can_expand_the_sam_transform(bootstrap: Document, role: str) -> None:
+    """sam deploy creates the change set as the deploy role, and CloudFormation
+    expands the transform as the execution role passed with --role-arn."""
+    transform = _load("template.yaml")["Transform"]
+    arn = "arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/"
+    arn += transform.removeprefix("AWS::")
+
+    granted = [
+        s
+        for s in _statements(bootstrap, role)
+        if s["Action"] == "cloudformation:CreateChangeSet"
+        and _resources(s) == [str({"Fn::Sub": arn})]
+    ]
+
+    assert granted, f"{role} cannot run {transform}"
 
 
 # Services the execution role needs for each resource type in template.yaml. A new
