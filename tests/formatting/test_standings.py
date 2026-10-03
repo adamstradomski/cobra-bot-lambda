@@ -211,3 +211,13 @@ def test_stale_private_notice() -> None:
         "**Standings after round 1**",
         f"Tournament is now private — data from {FETCHED_AT_TAG}",
     )
+
+
+def test_ac26_registration_header() -> None:
+    t = tournament(players=(player(1, "Ann"), player(2, "Bob")))
+    view = standings_view(t)
+    assert isinstance(view, StandingsView)
+
+    doc = format_standings(t, view)
+
+    assert doc.header[0] == "**Registered players — not started yet**"

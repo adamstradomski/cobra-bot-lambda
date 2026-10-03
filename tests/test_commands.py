@@ -1,6 +1,7 @@
 """`execute`: every command and every expected failure, at the commands layer
 (fake fetcher, in-memory store). The Worker end-to-end tests cover the wiring."""
 
+import json
 import re
 from collections.abc import Callable
 from datetime import timedelta
@@ -211,3 +212,19 @@ def test_unreadable_export(body: bytes) -> None:
     cache = _cache(Fetcher({4909: body}))
 
     assert run(Command("standings", "4909"), cache) == messages.COBRA_DATA_UNREADABLE
+
+
+def test_ac26_standings_before_the_first_round_list_the_registered_players() -> None:
+    """Players registered, no round paired: standings list them; pairings say
+    the tournament has not started."""
+    export = json.loads(fixture_bytes("dss"))
+    export["rounds"] = []
+    cache = _cache(Fetcher({5132: json.dumps(export).encode()}))
+
+    standings = _images(run(Command("standings", "5132"), cache))
+    pairings = run(Command("pairings", "5132"), cache)
+
+    first = standings.pages[0].embed
+    assert first.description.startswith("**Registered players — not started yet**\n")
+    assert first.footer == "31 players"
+    assert pairings == messages.NOT_STARTED

@@ -1,9 +1,11 @@
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 
+from builders import player, tournament
 from cobra_bot.cobra.parser import parse_tournament
 from cobra_bot.domain.models import Pairing, Player, Round, Seat, Tournament
 from cobra_bot.domain.rounds import (
@@ -13,6 +15,7 @@ from cobra_bot.domain.rounds import (
     StandingsView,
     TopCutNotSupported,
     is_pairing_complete,
+    name_order,
     pairings_view,
     standings_view,
 )
@@ -209,3 +212,84 @@ def test_tournament_with_only_elimination_rounds_reports_top_cut() -> None:
     t = _tournament((elim,))
 
     assert pairings_view(t) == TopCutNotSupported(round_number=1)
+
+
+# --- before the first round (AC-26) ---------------------------------------------
+
+
+def _registered(*names: str) -> Tournament:
+    return tournament(
+        players=tuple(
+            player(1000 + n, name, rank=len(names) - n)  # export rank: another order
+            for n, name in enumerate(names)
+        )
+    )
+
+
+def test_ac26_registered_players_listed_by_name_like_cobra() -> None:
+    """Cobra's own order for World Championship 2026 before round 1."""
+    t = _registered("ajjr82", "AJarr", "AbyssStaresBack", "Ajar", "34Witches")
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert [p.name for p in view.players] == [
+        "34Witches",
+        "AbyssStaresBack",
+        "Ajar",
+        "AJarr",
+        "ajjr82",
+    ]
+    assert [p.rank for p in view.players] == [1, 2, 3, 4, 5]
+    assert (view.after_round, view.started) == (0, False)
+
+
+def test_registered_players_with_the_same_name_keep_id_order() -> None:
+    t = _registered("Bob", "bob", "BOB")
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert [p.id for p in view.players] == [1000, 1001, 1002]
+
+
+def test_registered_players_keep_their_other_fields() -> None:
+    t = _registered("Zed")
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    (only,) = view.players
+    assert only == replace(t.players[0], rank=1)
+
+
+def test_registration_does_not_start_pairings() -> None:
+    t = _registered("Ann", "Bob")
+
+    assert pairings_view(t) == NotStarted()
+
+
+def test_started_tournament_is_marked_started(raw_fixture: LoadRaw) -> None:
+    view = standings_view(_fixture(raw_fixture, "dss"))
+
+    assert isinstance(view, StandingsView)
+    assert view.started
+
+
+@pytest.mark.parametrize(
+    "cobra_order",
+    [
+        ["34Witches", "AbyssStaresBack"],  # digits before letters
+        ["Ajar", "AJarr", "ajjr82"],  # case ignored
+        ["metronome", "M.G.K.", "Michael kwan"],  # punctuation ignored
+        ["TheComforter1212", "The king", "ThePaleKing"],  # spaces ignored
+        ["Yidaho", "Yi Sun", "Zeebag"],
+        ["Slapdash", "S@nit1zedPumpk1n", "soarix"],  # symbols ignored
+        ["laura_42", "laurh2010"],  # underscores ignored
+        ["Victor524287", "VØRT3X", "WarriorforC"],  # Ø as O
+        ["Zahya", "Żółw", "Zz"],  # diacritics ignored
+    ],
+)
+def test_name_order_matches_cobra(cobra_order: list[str]) -> None:
+    """Pairs as Cobra lists them (World Championship 2026, before round 1)."""
+    assert sorted(cobra_order[::-1], key=name_order) == cobra_order

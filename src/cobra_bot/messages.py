@@ -28,6 +28,7 @@ def round_out_of_range(requested: int, last_round: int) -> str:
 
 TOP_CUT_IN_PROGRESS = "Top cut in progress — not supported yet"
 NO_COMPLETED_ROUNDS = "No completed rounds yet"
+REGISTERED_PLAYERS = "Registered players — not started yet"
 IN_PROGRESS = "in progress"
 COMPLETE = "complete"
 
