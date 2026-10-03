@@ -83,6 +83,30 @@ def last_complete_swiss_round(t: Tournament) -> int:
     )
 
 
+def standings_round(t: Tournament) -> int:
+    """The Swiss round Cobra's `rank` and `matchPoints` stand after.
+
+    Cobra recounts them when the organiser closes a round, not when its last
+    result comes in (docs/findings.md Q2), so a complete round may not be
+    counted yet. The answer is the last complete round N, or an earlier one,
+    for which every player's `matchPoints` is the sum of their `combinedScore`
+    over Swiss rounds 1..N (byes included). If no round fits (e.g. points
+    adjusted by hand in Cobra), the last complete round is used as before.
+    """
+    last = last_complete_swiss_round(t)
+    swiss = [t.rounds[n - 1] for n in swiss_round_numbers(t)]
+    points = {p.id: 0 for p in t.players}
+    totals = [dict(points)]  # totals[n] = points after the first n Swiss rounds
+    for rnd in swiss[:last]:
+        for pairing in rnd:
+            for seat in (pairing.seat1, pairing.seat2):
+                if seat.player_id in points:
+                    points[seat.player_id] += seat.combined_score or 0
+        totals.append(dict(points))
+    counted = {p.id: p.match_points for p in t.players}
+    return next((n for n in range(last, -1, -1) if totals[n] == counted), last)
+
+
 def pairings_view(t: Tournament, requested: int | None = None) -> PairingsResult:
     """Pairings for `requested`, or for the latest Swiss round when it is None."""
     if not t.rounds:
@@ -108,7 +132,8 @@ def pairings_view(t: Tournament, requested: int | None = None) -> PairingsResult
 
 
 def standings_view(t: Tournament) -> StandingsResult:
-    """Standings after the last complete Swiss round, using Cobra's rank as-is.
+    """Standings after the last Swiss round Cobra has counted (`standings_round`),
+    using Cobra's rank as-is.
 
     With no complete round yet, the players are still listed in rank order (AC-08).
     Before the first round is paired, the registered players are listed as Cobra
@@ -119,7 +144,7 @@ def standings_view(t: Tournament) -> StandingsResult:
     if not t.rounds and not t.players:
         return NotStarted()
     return StandingsView(
-        after_round=last_complete_swiss_round(t),
+        after_round=standings_round(t),
         players=ranked_players(t),
         started=bool(t.rounds),
     )
