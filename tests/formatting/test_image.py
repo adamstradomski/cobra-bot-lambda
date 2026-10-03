@@ -104,7 +104,35 @@ def test_long_names_and_ids_are_cut_and_made_safe() -> None:
     _, name, corp, _, _, _ = c.standings_table(_standings(t)).groups[0][0]
 
     assert name.text == "A" * (c.NAME_CHARS - 1) + "…"
-    assert corp.text == "X" * (c.ID_CHARS - 1) + "…"
+    assert corp.text == "X" * 8 + "…"  # not in the map: its fallback, 9 columns
+
+
+def _id_cell(identity: str, color: str) -> str:
+    return c._identity(identity, color).text
+
+
+@pytest.mark.parametrize(
+    ("identity", "color", "shown"),
+    [
+        ("Nuvem SA: Law of the Land", c.CORP, "Nuvem SA"),  # fits
+        ("Abcdefghijklmn: X", c.CORP, "Abcdefghijklmn"),  # exactly 14: kept
+        ("Weyland Consortium: X", c.CORP, "Weyland"),  # 18: short name
+        ("Magdalene Keino-Chemutai: X", c.RUNNER, "Magdalene"),
+        ("Captain Padma Isbister: X", c.RUNNER, "Padma"),  # an override
+        ("Abcdefghijklmno: X", c.CORP, "Abcdefgh…"),  # 15, unknown: fallback
+    ],
+)
+def test_ids_up_to_14_characters_else_the_short_name(
+    identity: str, color: str, shown: str
+) -> None:
+    assert _id_cell(identity, color) == shown
+    assert len(_id_cell(identity, color)) <= c.ID_CHARS == 14
+
+
+def test_unknown_identity_is_the_secondary_dash() -> None:
+    cell = c._identity("", c.RUNNER)
+
+    assert (cell.text, cell.color) == ("—", c.SECONDARY)
 
 
 # --- pairings -----------------------------------------------------------------------
