@@ -195,10 +195,10 @@ def standings_table(view: StandingsView) -> Table:
             (
                 Cell(str(p.rank)),
                 Cell(_name(p), bold=True),
-                Cell(str(p.match_points), SCORE, bold=True),
-                Cell(f"{p.sos:.3f}", SECONDARY),
                 _identity(p.corp_identity, CORP),
                 _identity(p.runner_identity, RUNNER),
+                Cell(str(p.match_points), SCORE, bold=True),
+                Cell(f"{p.sos:.3f}", SECONDARY),
             )
         )
         previous = p
@@ -206,10 +206,10 @@ def standings_table(view: StandingsView) -> Table:
         columns=(
             Column(messages.RANK, "right"),
             Column(messages.PLAYER),
-            Column(messages.POINTS, "right"),
-            Column(messages.SOS, "right"),
             Column(messages.CORP),
             Column(messages.RUNNER),
+            Column(messages.POINTS, "right"),
+            Column(messages.SOS, "right"),
         ),
         groups=tuple(tuple(g) for g in groups),
     )
@@ -386,10 +386,7 @@ def c_pairings(
     t: Tournament, view: PairingsView, fonts: Fonts, *, private: bool = False
 ) -> list[ImageMessage]:
     doc = format_pairings(t, view, private=private)
-    # No G1/G2 legend: the image's column headings name the games.
-    footer = messages.compact_pairings_footer(
-        view.round_number, len(view.pairings), double_sided=False
-    )
+    footer = messages.compact_pairings_footer(view.round_number, len(view.pairings))
     return _messages(doc, pairings_table(t, view), footer, fonts, "pairings")
 
 

@@ -1,20 +1,37 @@
-"""Layouts B1 and B2: replies as Discord Components V2 messages.
+"""Layout B2: replies as Discord Components V2 messages in plain markdown.
+
+Built to look like format C's image and the same on desktop and mobile, so it
+uses nothing a client renders differently: no code blocks (mobile drops ANSI
+colours) and no tables (markdown has none). In their place:
+
+- side markers stand in for the image's colours: 🔵 Corp, 🟣 Runner;
+- rank and table numbers sit in inline code padded to one width, like a column;
+- in standings, a divider between groups of players on the same points stands
+  in for the image's stripes;
+- the order follows the image's columns: player, IDs, points, SoS.
+
+Standings, two lines per player:
+
+    `  1` **Alice**
+    -# 🔵 Nuvem · 🟣 Arissana · **22 pts** · SoS 1.821
+
+Pairings, one line per player, the Corp first; the winner in bold:
+
+    `T1 ` **Alice** · 🔵 Nuvem · **3**
+    `   ` Bob · 🟣 Zahya · 0
+
+Double-sided, the round total on the player's line and both games under it:
+
+    `T1 ` **Alice** · **3**
+    -# G1 🔵 Nuvem 3 · G2 🟣 Arissana 0
 
 Each page is one message: a container in the bot colour holding the title link
-and header, the table, the notes and legend, then the navigation, i.e. Prev,
-the page number, Next and Refresh, and for pairings a round select. The bot
-does not handle these buttons yet, and the preview swaps them for link buttons
-(`scripts/preview.py`).
+and header, the table, the legend, then the navigation (Prev, the page number,
+Next, Refresh, and a round select for pairings). The bot does not handle the
+controls yet; the preview swaps them for link buttons.
 
-- B1: the table is format A's ```ansi code block, split into pages instead of
-  embeds.
-- B2: no code block and no columns. One line per player or table with the
-  names and points in bold, then a small grey line with the IDs (and the SoS
-  in standings). Meant for phones, where code blocks lose their colours and
-  wrap.
-
-A V2 message holds at most 4000 characters of text across its components;
-`TEXT_LIMIT` keeps a margin for the button and select labels.
+A V2 message holds at most 4000 characters of text and 40 components (nested
+ones included); pages respect both.
 """
 
 from collections.abc import Sequence
@@ -23,7 +40,6 @@ from dataclasses import dataclass
 from cobra_bot import messages
 from cobra_bot.domain.models import Pairing, Player, Seat, Tournament
 from cobra_bot.domain.rounds import PairingsView, StandingsView
-from cobra_bot.formatting.chunking import FENCE_CLOSE, FENCE_OPEN
 from cobra_bot.formatting.document import EMBED_COLOR, Document, Entry, subtext
 from cobra_bot.formatting.pairings import format_pairings
 from cobra_bot.formatting.standings import format_standings
@@ -31,7 +47,11 @@ from cobra_bot.formatting.text import corp_label, escape_markdown, runner_label
 
 IS_COMPONENTS_V2 = 1 << 15  # message flag 32768
 TEXT_LIMIT = 3600  # of Discord's 4000, leaving room for labels and options
+COMPONENT_LIMIT = 40
 MAX_SELECT_OPTIONS = 25
+# Pads inline-code cells: a no-break space is not trimmed as whitespace and is
+# one column wide in the code font.
+CELL_PAD = "\u00a0"
 
 # Component types.
 ACTION_ROW = 1
@@ -64,42 +84,41 @@ class Nav:
 NO_ROUNDS = Nav()
 
 
-# --- B1 ---------------------------------------------------------------------
-
-
-def b1_pages(doc: Document, nav: Nav = NO_ROUNDS) -> list[Payload]:
-    """Format A's table, page by page; every entry stays whole."""
-    return _pages(doc, doc.entries, doc.footer, nav, code_block=True)
-
-
-# --- B2 ---------------------------------------------------------------------
+# --- standings --------------------------------------------------------------------
 
 
 def b2_standings(
     t: Tournament, view: StandingsView, *, private: bool = False
 ) -> list[Payload]:
     doc = format_standings(t, view, private=private)
+    width = max([1, *(len(str(p.rank)) for p in view.players)])
     entries = []
     previous: Player | None = None
     for p in view.players:
         gap = previous is not None and p.match_points != previous.match_points
-        entries.append(Entry(standings_line(p), gap=gap))
+        entries.append(Entry(standings_lines(p, width), gap=gap))
         previous = p
     footer = messages.compact_standings_footer(view.after_round, len(view.players))
-    return _pages(doc, tuple(entries), footer, NO_ROUNDS, code_block=False)
+    return _pages(doc, tuple(entries), footer, NO_ROUNDS, dividers=True)
 
 
-def standings_line(p: Player) -> str:
-    """`1\\. **Alice** — **22**`, then `-# Nuvem · Arissana · SoS 1.821`.
-
-    The dot is escaped: `1. ` at the start of a line would become a markdown
-    list, which Discord renumbers.
-    """
-    ids = f"{_id(corp_label(p.corp_identity))} · {_id(runner_label(p.runner_identity))}"
-    return (
-        f"{p.rank}\\. **{escape_markdown(p.name)}** — **{p.match_points}**\n"
-        + subtext(f"{ids} · {messages.SOS} {p.sos:.3f}")
+def standings_lines(p: Player, rank_width: int = 1) -> str:
+    """The rank and name, then the IDs, points and SoS in small grey text."""
+    details = " · ".join(
+        [
+            _side(messages.CORP_MARK, _id(corp_label(p.corp_identity))),
+            _side(messages.RUNNER_MARK, _id(runner_label(p.runner_identity))),
+            f"**{messages.points_label(p.match_points)}**",
+            f"{messages.SOS} {p.sos:.3f}",
+        ]
     )
+    return (
+        f"{cell(str(p.rank), rank_width, right=True)} **{escape_markdown(p.name)}**\n"
+        + subtext(details)
+    )
+
+
+# --- pairings ---------------------------------------------------------------------
 
 
 def b2_pairings(
@@ -107,71 +126,87 @@ def b2_pairings(
 ) -> list[Payload]:
     doc = format_pairings(t, view, private=private)
     ordered = sorted(view.pairings, key=lambda p: p.table)
-    entries = tuple(Entry(pairing_line(t, p)) for p in ordered)
-    footer = messages.compact_pairings_footer(
-        view.round_number, len(ordered), any(p.double_sided for p in ordered)
-    )
-    return _pages(doc, entries, footer, nav, code_block=False)
+    width = max([2, *(len(f"T{p.table}") for p in ordered)])
+    entries = tuple(Entry(pairing_lines(t, p, width), gap=True) for p in ordered)
+    footer = messages.compact_pairings_footer(view.round_number, len(ordered))
+    return _pages(doc, entries, footer, nav, dividers=False)
 
 
-def pairing_line(t: Tournament, pairing: Pairing) -> str:
-    """Single-sided, the Corp first: `T1 · **Alice 3** – **0 Bob**`, then
-    `-# C Nuvem · R Zahya`. Double-sided: seat 1 first with the round totals,
-    then one game per side, `-# G1: C Nuvem 3 – 0 R Zahya · G2: …`.
-    A bye: `T5 · BYE **Carol**`."""
-    label = f"T{pairing.table}"
+def pairing_lines(t: Tournament, pairing: Pairing, label_width: int = 2) -> str:
+    label = cell(f"T{pairing.table}", label_width)
+    blank = cell("", label_width)
     if pairing.is_bye:
         (player_id,) = pairing.player_ids or (None,)
-        return f"{label} · {messages.BYE} **{_name(t, player_id)}**"
+        return f"{label} {_name(t, player_id)} · {messages.BYE}"
     s1, s2 = pairing.seat1, pairing.seat2
     if pairing.double_sided:
-        first, second = (s1, _total(s1)), (s2, _total(s2))
+        (total1, won1), (total2, won2) = _results(pairing, _total(s1), _total(s2))
         p1, p2 = _player(t, s1), _player(t, s2)
-        g1 = _game(
-            1, _corp(p1), s1.corp_score, _runner(p2), s2.runner_score, corp_first=True
+        return "\n".join(
+            [
+                f"{label} {_seat(t, s1, won1)} · {_points(total1, won1)}",
+                subtext(
+                    _games(
+                        (messages.CORP_MARK, _corp(p1), s1.corp_score),
+                        (messages.RUNNER_MARK, _runner(p1), s1.runner_score),
+                    )
+                ),
+                f"{blank} {_seat(t, s2, won2)} · {_points(total2, won2)}",
+                subtext(
+                    _games(
+                        (messages.RUNNER_MARK, _runner(p2), s2.runner_score),
+                        (messages.CORP_MARK, _corp(p2), s2.corp_score),
+                    )
+                ),
+            ]
         )
-        g2 = _game(
-            2, _runner(p1), s1.runner_score, _corp(p2), s2.corp_score, corp_first=False
-        )
-        details = f"{g1} · {g2}"
-    else:
-        corp, runner = (s1, s2) if s1.role == "corp" else (s2, s1)
-        first, second = (corp, corp.combined_score), (runner, runner.combined_score)
-        details = (
-            f"{messages.CORP_TAG} {_corp(_player(t, corp))} · "
-            f"{messages.RUNNER_TAG} {_runner(_player(t, runner))}"
-        )
-    a, b = _scores(pairing, first[1], second[1])
-    return (
-        f"{label} · **{_name(t, first[0].player_id)} {a}** – "
-        f"**{b} {_name(t, second[0].player_id)}**\n" + subtext(details)
+    # Single-sided games always have roles (findings Q3); the Corp comes first.
+    corp, runner = (s1, s2) if s1.role == "corp" else (s2, s1)
+    (corp_pts, corp_won), (runner_pts, runner_won) = _results(
+        pairing, corp.combined_score, runner.combined_score
+    )
+    corp_id = _side(messages.CORP_MARK, _corp(_player(t, corp)))
+    runner_id = _side(messages.RUNNER_MARK, _runner(_player(t, runner)))
+    return "\n".join(
+        [
+            f"{label} {_seat(t, corp, corp_won)} · {corp_id} · "
+            f"{_points(corp_pts, corp_won)}",
+            f"{blank} {_seat(t, runner, runner_won)} · {runner_id} · "
+            f"{_points(runner_pts, runner_won)}",
+        ]
     )
 
 
-def _game(
-    game: int,
-    first_id: str,
-    first_score: int | None,
-    second_id: str,
-    second_score: int | None,
-    *,
-    corp_first: bool,
-) -> str:
-    tags = (
-        (messages.CORP_TAG, messages.RUNNER_TAG)
-        if corp_first
-        else (messages.RUNNER_TAG, messages.CORP_TAG)
-    )
-    return (
-        f"{messages.game_label(game)}: {tags[0]} {first_id} {_shown(first_score)} – "
-        f"{_shown(second_score)} {tags[1]} {second_id}"
+type Game = tuple[str, str, int | None]  # side marker, ID, points
+
+
+def _games(game1: Game, game2: Game) -> str:
+    return " · ".join(
+        f"{messages.game_label(n)} {_side(mark, label)} {_shown(points)}"
+        for n, (mark, label, points) in enumerate((game1, game2), start=1)
     )
 
 
-def _scores(pairing: Pairing, a: int | None, b: int | None) -> tuple[str, str]:
+def _results(
+    pairing: Pairing, first: int | None, second: int | None
+) -> tuple[tuple[str, bool], tuple[str, bool]]:
+    """Points as shown and whether that player won (shown in bold)."""
     if pairing.intentional_draw:
-        return messages.INTENTIONAL_DRAW, messages.INTENTIONAL_DRAW
-    return _shown(a), _shown(b)
+        draw = (messages.INTENTIONAL_DRAW, False)
+        return draw, draw
+    shown = (_shown(first), _shown(second))
+    if first is None or second is None or first == second:
+        return (shown[0], False), (shown[1], False)
+    return (shown[0], first > second), (shown[1], second > first)
+
+
+def _seat(t: Tournament, seat: Seat, won: bool) -> str:
+    name = _name(t, seat.player_id)
+    return f"**{name}**" if won else name
+
+
+def _points(shown: str, won: bool) -> str:
+    return f"**{shown}**" if won else shown
 
 
 def _shown(points: int | None) -> str:
@@ -193,6 +228,10 @@ def _name(t: Tournament, player_id: int | None) -> str:
     return escape_markdown(player.name) if player else messages.UNKNOWN_PLAYER
 
 
+def _side(mark: str, label: str) -> str:
+    return f"{mark} {label}"
+
+
 def _id(label: str) -> str:
     return escape_markdown(label) or messages.UNKNOWN_IDENTITY
 
@@ -205,7 +244,13 @@ def _runner(player: Player | None) -> str:
     return _id(runner_label(player.runner_identity if player else None))
 
 
-# --- pages ------------------------------------------------------------------
+def cell(text: str, width: int, *, right: bool = False) -> str:
+    """`text` in inline code, padded to `width` columns."""
+    padding = CELL_PAD * max(0, width - len(text))
+    return f"`{padding}{text}`" if right else f"`{text}{padding}`"
+
+
+# --- pages ------------------------------------------------------------------------
 
 
 def _pages(
@@ -214,51 +259,70 @@ def _pages(
     footer: str,
     nav: Nav,
     *,
-    code_block: bool,
+    dividers: bool,
 ) -> list[Payload]:
+    """Entries joined into text blocks: a new block starts at every entry with a
+    gap, after a divider when `dividers` is set."""
     head = "\n".join([f"### [{escape_markdown(doc.title)}]({doc.url})", *doc.header])
-    tail = "\n".join([*doc.notes, *([subtext(footer)] if footer else [])])
-    fences = len(FENCE_OPEN) + len(FENCE_CLOSE) if code_block else 0
-    budget = TEXT_LIMIT - len(head) - len(tail) - fences
-    groups = paginate(entries, budget)
+    tail = "\n".join([*doc.notes, subtext(f"{messages.SIDE_LEGEND} · {footer}")])
+    fixed = 1 + 2 + 1 + _nav_size(nav)  # container, head and tail, separator, nav
+    groups = paginate(
+        entries,
+        TEXT_LIMIT - len(head) - len(tail),
+        COMPONENT_LIMIT - fixed,
+        block_cost=2 if dividers else 1,
+    )
     pages = []
     for number, group in enumerate(groups, start=1):
         blocks: list[Component] = [text(head)]
-        if group:
-            body = join_entries(group)
-            blocks.append(
-                text(f"{FENCE_OPEN}{body}{FENCE_CLOSE}" if code_block else body)
-            )
-        if tail:
-            blocks.append(text(tail))
-        blocks.append({"type": SEPARATOR, "divider": True, "spacing": 1})
+        for index, block in enumerate(split_blocks(group)):
+            if dividers and index > 0:
+                blocks.append(divider())
+            blocks.append(text(block))
+        blocks.append(text(tail))
+        blocks.append(divider())
         blocks.extend(nav_rows(number, len(groups), nav))
         pages.append(container(blocks))
     return pages
 
 
-def paginate(entries: Sequence[Entry], budget: int) -> list[tuple[Entry, ...]]:
-    """Split entries into pages of at most `budget` characters, keeping every
-    entry whole; always at least one (possibly empty) page."""
+def paginate(
+    entries: Sequence[Entry], chars: int, components: int, *, block_cost: int = 1
+) -> list[tuple[Entry, ...]]:
+    """Split entries into pages of at most `chars` characters and `components`
+    components, keeping every entry whole. An entry with a gap (or the first on
+    a page) starts a new block costing `block_cost` components. Always at least
+    one (possibly empty) page."""
     pages: list[list[Entry]] = [[]]
-    used = 0
+    used_chars = used_components = 0
     for entry in entries:
-        cost = len(entry.text) + (2 if entry.gap else 1)  # its separator, at most
-        if pages[-1] and used + cost > budget:
+        cost = block_cost if entry.gap or not pages[-1] else 0
+        size = len(entry.text) + 1  # its line break
+        if pages[-1] and (
+            used_chars + size > chars or used_components + cost > components
+        ):
             pages.append([])
-            used = 0
+            used_chars = used_components = 0
+            cost = block_cost
         pages[-1].append(entry)
-        used += cost
+        used_chars += size
+        used_components += cost
     return [tuple(page) for page in pages]
 
 
-def join_entries(entries: Sequence[Entry]) -> str:
-    """Entries one per line, a blank line before those with a gap (not before
-    the first on the page)."""
-    parts = [entries[0].text]
-    for entry in entries[1:]:
-        parts.append(("\n\n" if entry.gap else "\n") + entry.text)
-    return "".join(parts)
+def split_blocks(entries: Sequence[Entry]) -> list[str]:
+    """Entries joined one per line; an entry with a gap starts a new block."""
+    blocks: list[list[str]] = []
+    for entry in entries:
+        if entry.gap or not blocks:
+            blocks.append([])
+        blocks[-1].append(entry.text)
+    return ["\n".join(block) for block in blocks]
+
+
+def _nav_size(nav: Nav) -> int:
+    """Components in the navigation: a row of four buttons, and the select row."""
+    return 5 + (2 if nav.rounds else 0)
 
 
 def nav_rows(page: int, pages: int, nav: Nav) -> list[Component]:
@@ -298,6 +362,10 @@ def nav_rows(page: int, pages: int, nav: Nav) -> list[Component]:
 
 def text(content: str) -> Component:
     return {"type": TEXT_DISPLAY, "content": content}
+
+
+def divider() -> Component:
+    return {"type": SEPARATOR, "divider": True, "spacing": 1}
 
 
 def button(label: str, custom_id: str, *, disabled: bool = False) -> Component:
@@ -340,3 +408,19 @@ def text_length(payload: Payload) -> int:
         elif isinstance(item, list):
             stack.extend(item)
     return total
+
+
+def component_count(payload: Payload) -> int:
+    """Components in the message, nested ones included (limit 40)."""
+    count = 0
+    stack: list[object] = _list(payload.get("components"))
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict) and "type" in item:
+            count += 1
+            stack.extend(_list(item.get("components")))
+    return count
+
+
+def _list(value: object) -> list[object]:
+    return list(value) if isinstance(value, list) else []

@@ -386,13 +386,15 @@ def default_font(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(image, "load_fonts", lambda *_: image.Fonts(font, font))
 
 
-@pytest.mark.parametrize("layout", ["b1", "b2"])
-def test_v2_formats_swap_interactive_components_for_links(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str], layout: str
+LARGE = str(FIXTURES_DIR / "large_top_cut.json")
+
+
+def test_b2_swaps_interactive_components_for_links(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A channel webhook rejects custom IDs and selects (HTTP 400)."""
     (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", layout, "--id", "5018"]
+        preview_script, capsys, [DSS, "pairings", "--format", "b2", "--id", "5018"]
     )
 
     assert payload["flags"] == 1 << 15
@@ -406,39 +408,54 @@ def test_v2_formats_swap_interactive_components_for_links(
     }
 
 
-def test_mockup_turns_the_round_select_into_link_rows(
+def test_mockup_shows_the_select_as_one_button_with_the_chosen_round(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (payload,) = _dry_run(preview_script, capsys, [DSS, "pairings", "--format", "b1"])
+    (payload,) = _dry_run(
+        preview_script, capsys, [DSS, "pairings", "--round", "2", "--format", "b2"]
+    )
 
-    rounds = [
-        (d["label"], d["disabled"])
-        for d in _walk(payload)
-        if str(d.get("label", "")).startswith("Round ")
-    ]
-    assert sorted(rounds) == [("Round 1", False), ("Round 2", False), ("Round 3", True)]
+    rounds = [d["label"] for d in _walk(payload) if "Round" in str(d.get("label"))]
+    assert rounds == ["Round 2 ▾"]
 
 
-def test_mockup_splits_options_into_rows_of_five(preview_script: ModuleType) -> None:
-    select = {
-        "type": 3,
-        "custom_id": "cobra:round",
-        "options": [{"label": f"Round {n}", "value": str(n)} for n in range(1, 8)],
-    }
-    row = {"type": 1, "components": [select]}
-    payload = {"components": [{"type": 17, "components": [row]}]}
+def test_mockup_select_without_a_choice_shows_the_placeholder(
+    preview_script: ModuleType,
+) -> None:
+    select = {"type": 3, "custom_id": "r", "placeholder": "Pick", "options": []}
+    payload = {"components": [{"type": 1, "components": [select]}]}
 
     mocked = preview_script.link_mockup(payload, "https://x.test")
 
-    rows = mocked["components"][0]["components"]
-    assert [len(r["components"]) for r in rows] == [5, 2]
+    (button,) = mocked["components"][0]["components"]
+    assert button["label"] == "Pick ▾"
+
+
+def test_mockup_keeps_the_component_count(
+    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Discord caps a message at 40 components. The select once became one
+    button per round, and a 14-round tournament went over the cap (HTTP 400)."""
+    from cobra_bot.preview.components import component_count
+
+    real = _dry_run(
+        preview_script,
+        capsys,
+        [SSS, "pairings", "--round", "8", "--format", "b2", "--no-mockup"],
+    )
+    mocked = _dry_run(
+        preview_script, capsys, [SSS, "pairings", "--round", "8", "--format", "b2"]
+    )
+
+    assert [component_count(p) for p in mocked] == [component_count(p) for p in real]
+    assert all(component_count(p) <= 40 for p in mocked)
 
 
 def test_no_mockup_keeps_the_real_components(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--no-mockup"]
+        preview_script, capsys, [DSS, "pairings", "--format", "b2", "--no-mockup"]
     )
 
     nested = _walk(payload)
@@ -466,7 +483,14 @@ def test_a_posts_do_not_set_with_components(preview_script: ModuleType) -> None:
     assert all("with_components" not in r.url.params for r in seen)
 
 
-@pytest.mark.parametrize("layout", ["b1", "b2", "c"])
+def test_b1_is_gone(preview_script: ModuleType) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        preview_script.main([DSS, "standings", "--format", "b1", "--dry-run"])
+
+    assert exit_info.value.code == 2
+
+
+@pytest.mark.parametrize("layout", ["b2", "c"])
 def test_error_reply_is_the_bots_text_in_every_format(
     preview_script: ModuleType,
     capsys: pytest.CaptureFixture[str],
@@ -481,7 +505,7 @@ def test_error_reply_is_the_bots_text_in_every_format(
 
 
 @pytest.mark.parametrize("layout", ["b2", "c"])
-def test_player_has_only_formats_a_and_b1(
+def test_player_has_only_format_a(
     preview_script: ModuleType,
     capsys: pytest.CaptureFixture[str],
     layout: str,
@@ -495,27 +519,17 @@ def test_player_has_only_formats_a_and_b1(
     assert "pairings and standings" in capsys.readouterr().err
 
 
-def test_b1_player_cards(
-    preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (payload,) = _dry_run(
-        preview_script, capsys, [DSS, "player", "Player0029", "--format", "b1"]
-    )
-
-    assert "Player0029" in json.dumps(payload)
-
-
 def test_page_option_picks_one_page(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     every = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--all-pages"]
+        preview_script, capsys, [LARGE, "standings", "--format", "b2", "--all-pages"]
     )
     second = _dry_run(
-        preview_script, capsys, [DSS, "pairings", "--format", "b1", "--page", "2"]
+        preview_script, capsys, [LARGE, "standings", "--format", "b2", "--page", "2"]
     )
 
-    assert len(every) == 2
+    assert len(every) > 1
     assert second == [every[1]]
 
 
@@ -523,17 +537,17 @@ def test_page_past_the_last_is_a_usage_error(
     preview_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     code = preview_script.main(
-        [DSS, "pairings", "--format", "b1", "--page", "3", "--dry-run"], env={}
+        [DSS, "pairings", "--format", "b2", "--page", "2", "--dry-run"], env={}
     )
 
     assert code == 2
-    assert "has 2 page(s)" in capsys.readouterr().err
+    assert "has 1 page(s)" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "x"])
 def test_page_must_be_a_positive_number(preview_script: ModuleType, value: str) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        preview_script.main([DSS, "standings", "--format", "b1", "--page", value])
+        preview_script.main([DSS, "standings", "--format", "b2", "--page", value])
 
     assert exit_info.value.code == 2
 
@@ -619,7 +633,7 @@ def test_rejected_post_prints_discords_reason_without_the_token(
     http = httpx.Client(transport=httpx.MockTransport(handler))
 
     code = preview_script.main(
-        [DSS, "standings", "--format", "b1", "--no-mockup"], env=ENV, http=http
+        [DSS, "standings", "--format", "b2", "--no-mockup"], env=ENV, http=http
     )
 
     assert code == 1

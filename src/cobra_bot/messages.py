@@ -153,14 +153,24 @@ def game_heading(game: int) -> str:
     return f"Game {game}"
 
 
+# Side markers: the colours of format C, in text that looks the same on every
+# client (markdown has no colours outside code blocks).
+CORP_MARK = "🔵"
+RUNNER_MARK = "🟣"
+SIDE_LEGEND = f"{CORP_MARK} {CORP} · {RUNNER_MARK} {RUNNER}"
+
+
+def points_label(points: int) -> str:
+    return f"{points} pts"
+
+
 def compact_standings_footer(after_round: int | None, players: int) -> str:
     parts = [f"Round {after_round}"] if after_round else []
     return " · ".join([*parts, _count(players, "player")])
 
 
-def compact_pairings_footer(round_number: int, tables: int, double_sided: bool) -> str:
-    footer = f"Round {round_number} · {_count(tables, 'table')}"
-    return f"{footer} · G1 = game 1, G2 = game 2" if double_sided else footer
+def compact_pairings_footer(round_number: int, tables: int) -> str:
+    return f"Round {round_number} · {_count(tables, 'table')}"
 
 
 # --- command registration (SPEC §2) --------------------------------------------

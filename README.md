@@ -354,10 +354,10 @@ Options go after the subcommand, e.g. `scripts/preview.py 5018 pairings --round 
 | `--stale` | off | Render as stale data with Cobra unavailable (the cached copy is 10 minutes old). |
 | `--private` | off | Render as stale data because the tournament became private. Not with `--stale`. |
 | `--id N` | from `SOURCE` | Tournament ID used in the Cobra links. Default: `SOURCE` itself, or the name of the export's directory if it is a number, else `1`. Must be positive. |
-| `--format a\|b1\|b2\|c` | `a` | Reply layout; see [Layouts under test](#layouts-under-test) below. `a` is the bot's reply. |
-| `--page N` | `1` | `b1`, `b2`, `c`: which page to post. A page past the last is an error (exit `2`). |
-| `--all-pages` | off | `b1`, `b2`, `c`: post every page. Not with `--page`. |
-| `--no-mockup` | off | `b1`, `b2`: keep the real buttons and select. A channel webhook rejects them (exit `1`, `Discord: {"components": …}`); useful with `--dry-run`. |
+| `--format a\|b2\|c` | `a` | Reply layout; see [Layouts under test](#layouts-under-test) below. `a` is the bot's reply. |
+| `--page N` | `1` | `b2`, `c`: which page to post. A page past the last is an error (exit `2`). |
+| `--all-pages` | off | `b2`, `c`: post every page. Not with `--page`. |
+| `--no-mockup` | off | `b2`: keep the real buttons and select. A channel webhook rejects them (exit `1`, `Discord: {"components": …}`); useful with `--dry-run`. |
 | `--font PATH` / `--bold-font PATH` | a system font | `c`: TrueType fonts for the image. Default: Segoe UI (Windows), DejaVu Sans (Linux), Arial (macOS). `--bold-font` defaults to `--font`. |
 | `--save-images DIR` | — | `c`: also write the PNGs into `DIR` (created if missing), also with `--dry-run`. |
 | `--note TEXT` | — | Post `TEXT` as a plain message first (markdown works, mentions never ping), to label what follows. |
@@ -387,16 +387,15 @@ It prints one line to stderr when done, e.g. `preview: standings of 20261001T160
 | Format | What it posts | Commands |
 |--------|---------------|----------|
 | `a` | The bot's embeds: a table in an `ansi` code block, coloured on desktop, plain on mobile (Discord's mobile app drops ANSI colours). | all |
-| `b1` | Format A's table, split into pages, in a Components V2 container in the bot colour: title link, header, table, legend, then **Prev / 1 / 3 / Next / Refresh** and, for pairings, a round select. | all |
-| `b2` | Components V2 without a code block, for phones: one line per player or table with the name and points in bold, then a small grey line with the IDs (and the SoS in standings). Same controls as `b1`. | pairings, standings |
-| `c` | The table as a PNG in an embed: full colours, real columns with headings, no cut names; the text cannot be selected. At most 40 rows per image, one message per page. | pairings, standings |
+| `b2` | A Components V2 container in the bot colour, in plain markdown that looks the same on desktop and mobile (no code block, no ANSI colours). Built to look like `c`: 🔵 / 🟣 mark the Corp and Runner IDs; ranks and table numbers sit in padded inline code, like a column; in standings a divider separates the points groups. Standings: the rank and name in bold, then a small grey line with the IDs, the points and the SoS. Pairings: one line per player, the Corp first, the winner in bold, with the ID and points; double-sided, the round total, then a grey line with both games. Below: **Prev / 1 / 3 / Next / Refresh** and, for pairings, a round select. Pages keep to Discord's 4000 characters and 40 components. | pairings, standings |
+| `c` | The table as a PNG in an embed: full colours, real columns with headings (standings: #, player, Corp, Runner, points, SoS), no cut names; the text cannot be selected. At most 40 rows per image, one message per page. | pairings, standings |
 
-**The controls are a mockup.** Channel webhooks may post only non-interactive components (Discord answers `HTTP 400 {"components": ["0"]}` otherwise), and nothing handles clicks yet. The preview therefore turns every button into a link button with the same label (it opens the tournament on Cobra), and the round select into rows of link buttons, one per round, with the shown round disabled. `--no-mockup --dry-run` prints the real components the bot would send.
+**The controls are a mockup.** Channel webhooks may post only non-interactive components (Discord answers `HTTP 400 {"components": ["0"]}` otherwise), and nothing handles clicks yet. The preview therefore turns every button into a link button with the same label (it opens the tournament on Cobra), and the round select into one link button showing the chosen round, `Round 2 ▾`. The mockup keeps the real message's component count, so a page that fits the 40-component cap still fits. `--no-mockup --dry-run` prints the real components the bot would send.
 
 **Requirements for `c`:** [Pillow](https://pypi.org/project/pillow/), a dev dependency (`uv sync` installs it; it is not in `src/requirements.txt`, so it never reaches Lambda), and a font with Latin Extended glyphs; Pillow's built-in font has none of `Żółw`.
 
 To compare all layouts in one go, label each with `--note`:
 
 ```bash
-uv run --env-file .env scripts/preview.py 5018 pairings --format b2 --note "## B2 · DSS pairings"
+uv run --env-file .env scripts/preview.py 5018 pairings --round 2 --format b2 --note "## B2 · DSS pairings, round 2"
 ```

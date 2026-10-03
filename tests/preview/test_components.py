@@ -1,4 +1,5 @@
-"""Layouts B1 and B2 (Components V2), built from domain objects and fixtures."""
+"""Layout B2 (Components V2, plain markdown), built from domain objects and
+fixtures."""
 
 import json
 from collections.abc import Callable
@@ -15,9 +16,7 @@ from cobra_bot.domain.rounds import (
     pairings_view,
     standings_view,
 )
-from cobra_bot.formatting.chunking import FENCE_CLOSE, FENCE_OPEN
-from cobra_bot.formatting.document import EMBED_COLOR, Document, Entry
-from cobra_bot.formatting.standings import format_standings
+from cobra_bot.formatting.document import EMBED_COLOR, Entry
 from cobra_bot.preview import components as c
 from cobra_bot.preview.components import Nav
 
@@ -25,6 +24,10 @@ type LoadRaw = Callable[[str], object]
 type Payload = dict[str, object]
 
 DISCORD_TEXT_LIMIT = 4000
+DISCORD_COMPONENT_LIMIT = 40
+PAD = "\u00a0"
+CORP = messages.CORP_MARK
+RUNNER = messages.RUNNER_MARK
 
 
 def _fixture(raw_fixture: LoadRaw, name: str) -> Tournament:
@@ -64,21 +67,20 @@ def _rows(payload: Payload) -> list[list[dict[str, object]]]:
     ]
 
 
-def _doc(*entries: Entry, footer: str = "legend") -> Document:
-    return Document(
-        title="Cup",
-        url="https://example.test/t/1",
-        header=("**State**", "Data from <t:1:R>"),
-        entries=entries,
-        footer=footer,
+def _one_round(*players: object) -> Tournament:
+    return tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),),
+        players=players,  # type: ignore[arg-type]
     )
 
 
-# --- message shape ------------------------------------------------------------
+# --- message shape ------------------------------------------------------------------
 
 
 def test_page_is_a_components_v2_container_in_the_bot_colour() -> None:
-    (page,) = c.b1_pages(_doc(Entry("row")))
+    t = _one_round(player(1, rank=1, points=3), player(2, rank=2))
+
+    (page,) = c.b2_standings(t, _standings(t))
 
     assert page["flags"] == 1 << 15
     assert page["allowed_mentions"] == {"parse": []}
@@ -87,48 +89,249 @@ def test_page_is_a_components_v2_container_in_the_bot_colour() -> None:
     assert "embeds" not in page
 
 
-def test_page_text_title_link_header_table_legend() -> None:
-    (page,) = c.b1_pages(_doc(Entry("row 1"), Entry("row 2", gap=True)))
+def test_page_head_title_link_and_header() -> None:
+    t = _one_round(player(1, rank=1, points=3), player(2, rank=2))
 
-    head, table, tail = _texts(page)
-    assert head == "### [Cup](https://example.test/t/1)\n**State**\nData from <t:1:R>"
-    assert table == f"{FENCE_OPEN}row 1\n\nrow 2{FENCE_CLOSE}"
-    assert tail == "-# legend"
+    (page,) = c.b2_standings(t, _standings(t))
+
+    assert _texts(page)[0] == (
+        "### [Test Cup](https://tournaments.nullsignal.games/tournaments/1/players/"
+        "standings)\n**Standings after round 1**\nData from <t:1790856000:R>"
+    )
 
 
 def test_title_markdown_is_escaped() -> None:
-    doc = Document("*Cup* [2]", "https://x.test", (), (Entry("r"),))
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(None)),),
+        players=(player(1),),
+        name="*Cup* [2]",
+    )
 
-    (page,) = c.b1_pages(doc)
+    (page,) = c.b2_standings(t, _standings(t))
 
-    assert _texts(page)[0] == r"### [\*Cup\* \[2\]](https://x.test)"
-
-
-def test_no_entries_gives_one_page_without_a_table() -> None:
-    (page,) = c.b1_pages(_doc())
-
-    assert len(_texts(page)) == 2  # header and legend
+    assert _texts(page)[0].startswith(r"### [\*Cup\* \[2\]](https://")
 
 
-def test_notes_come_before_the_legend() -> None:
-    doc = Document("Cup", "https://x.test", (), (), notes=("No players match.",))
+def test_legend_names_the_side_markers() -> None:
+    t = _one_round(player(1, rank=1, points=3), player(2, rank=2))
 
-    (page,) = c.b1_pages(doc, c.NO_ROUNDS)
+    (page,) = c.b2_standings(t, _standings(t))
 
-    assert _texts(page)[-1] == "No players match."
-
-
-# --- navigation -------------------------------------------------------------------
+    assert _texts(page)[-1] == f"-# {CORP} Corp · {RUNNER} Runner · Round 1 · 2 players"
 
 
-def _buttons(page: Payload) -> list[dict[str, object]]:
-    return _rows(page)[0]
+def test_no_code_blocks_or_ansi(raw_fixture: LoadRaw) -> None:
+    """Desktop and mobile render the same: mobile drops ANSI colours."""
+    t = _fixture(raw_fixture, "dss")
+
+    pages = [*c.b2_pairings(t, _pairings(t)), *c.b2_standings(t, _standings(t))]
+
+    assert "`" * 3 not in json.dumps(pages)
+    assert "\\u001b" not in json.dumps(pages)
+
+
+# --- cells --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "width", "right", "expected"),
+    [
+        ("1", 3, True, f"`{PAD}{PAD}1`"),
+        ("100", 3, True, "`100`"),
+        ("T1", 3, False, f"`T1{PAD}`"),
+        ("", 2, False, f"`{PAD}{PAD}`"),
+        ("T100", 3, False, "`T100`"),  # never cut
+    ],
+)
+def test_cell_pads_with_no_break_spaces(
+    value: str, width: int, right: bool, expected: str
+) -> None:
+    assert c.cell(value, width, right=right) == expected
+
+
+# --- standings ----------------------------------------------------------------------
+
+
+def test_standings_lines_ids_before_points_and_sos() -> None:
+    p = player(
+        1,
+        "Alice",
+        rank=1,
+        points=22,
+        sos="1.8214",
+        corp="Nuvem SA: Law of the Land",
+        runner="Arissana Rocha Nahu: Street Artist",
+    )
+
+    assert c.standings_lines(p) == (
+        f"`1` **Alice**\n-# {CORP} Nuvem · {RUNNER} Arissana · **22 pts** · SoS 1.821"
+    )
+
+
+def test_standings_rank_padded_to_the_widest_rank() -> None:
+    assert c.standings_lines(player(1, rank=7), 3).startswith(f"`{PAD}{PAD}7` ")
+
+
+def test_standings_lines_escape_markdown_in_names() -> None:
+    first_line = c.standings_lines(player(1, "*bold_name~", rank=30), 2).split("\n")[0]
+
+    assert first_line == r"`30` **\*bold\_name\~**"
+
+
+def test_standings_unknown_ids_show_the_placeholder() -> None:
+    details = c.standings_lines(player(1, "Alice")).split("\n")[1]
+
+    assert details == f"-# {CORP} — · {RUNNER} — · **0 pts** · SoS 0.000"
+
+
+def test_standings_divider_between_points_groups() -> None:
+    players = (
+        player(1, "A", rank=1, points=6),
+        player(2, "B", rank=2, points=6),
+        player(3, "C", rank=3, points=3),
+    )
+    t = _one_round(*players)
+
+    (page,) = c.b2_standings(t, _standings(t))
+
+    blocks = _container(page)
+    kinds = [b["type"] for b in blocks]
+    # head, group 6, divider, group 3, legend, divider, nav row
+    assert kinds[:6] == [
+        c.TEXT_DISPLAY,
+        c.TEXT_DISPLAY,
+        c.SEPARATOR,
+        c.TEXT_DISPLAY,
+        c.TEXT_DISPLAY,
+        c.SEPARATOR,
+    ]
+    assert "**A**" in str(blocks[1]["content"])
+    assert "**B**" in str(blocks[1]["content"])
+    assert "**C**" in str(blocks[3]["content"])
+
+
+def test_standings_have_no_round_select() -> None:
+    t = _one_round(player(1, rank=1, points=3), player(2, rank=2))
+
+    (page,) = c.b2_standings(t, _standings(t))
+
+    assert len(_rows(page)) == 1
+
+
+# --- pairings -----------------------------------------------------------------------
+
+PLAYERS = (
+    player(
+        1,
+        "Alice",
+        corp="Nuvem SA: Law of the Land",
+        runner="Zahya Sadeghi: Versatile Smuggler",
+    ),
+    player(
+        2,
+        "Bob",
+        corp="Haas-Bioroid: Precision Design",
+        runner="Arissana Rocha Nahu: Street Artist",
+    ),
+)
+BLANK = f"`{PAD}{PAD}`"
+
+
+def test_single_sided_corp_first_winner_bold() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(4, seat(2, "runner", 0), seat(1, "corp", 3))
+
+    assert c.pairing_lines(t, p) == (
+        f"`T4` **Alice** · {CORP} Nuvem · **3**\n{BLANK} Bob · {RUNNER} Arissana · 0"
+    )
+
+
+def test_single_sided_unreported_leaves_both_plain() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(1, seat(1, "corp"), seat(2, "runner"))
+
+    assert c.pairing_lines(t, p) == (
+        f"`T1` Alice · {CORP} Nuvem · –\n{BLANK} Bob · {RUNNER} Arissana · –"
+    )
+
+
+def test_intentional_draw_shows_id_and_no_winner() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(1, seat(1, "corp", 1), seat(2, "runner", 1), intentional_draw=True)
+
+    lines = c.pairing_lines(t, p).split("\n")
+    assert [line.rsplit(" · ", 1)[1] for line in lines] == ["ID", "ID"]
+    assert "**" not in "".join(lines)
+
+
+def test_double_sided_total_then_both_games() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(2, seat(1, corp=3, runner=3), seat(2, corp=0, runner=0))
+
+    assert c.pairing_lines(t, p) == (
+        f"`T2` **Alice** · **6**\n"
+        f"-# G1 {CORP} Nuvem 3 · G2 {RUNNER} Zahya 3\n"
+        f"{BLANK} Bob · 0\n"
+        f"-# G1 {RUNNER} Arissana 0 · G2 {CORP} HB 0"
+    )
+
+
+def test_double_sided_half_reported() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(2, seat(1, corp=3), seat(2, runner=0))
+
+    lines = c.pairing_lines(t, p).split("\n")
+    assert lines[0] == "`T2` **Alice** · **3**"
+    assert lines[1] == f"-# G1 {CORP} Nuvem 3 · G2 {RUNNER} Zahya –"
+
+
+@pytest.mark.parametrize("bye_seat", [1, 2])
+def test_bye_in_either_seat(bye_seat: int) -> None:
+    t = tournament(players=PLAYERS)
+    seats = (seat(1, None, 3), seat(None))
+    p = pairing(9, *(seats if bye_seat == 2 else seats[::-1]))
+
+    assert c.pairing_lines(t, p) == f"`T9` Alice · {messages.BYE}"
+
+
+def test_table_label_padded_to_the_widest_table() -> None:
+    t = tournament(players=PLAYERS)
+    p = pairing(9, seat(1, None, 3), seat(None))
+
+    assert c.pairing_lines(t, p, 3).startswith(f"`T9{PAD}` ")
+
+
+def test_unknown_player_and_escaped_names() -> None:
+    t = tournament(players=(player(1, "_under_"),))
+    p = pairing(1, seat(1, "corp", 3), seat(99, "runner", 0))
+
+    first, second = c.pairing_lines(t, p).split("\n")
+    assert first.startswith(r"`T1` **\_under\_** · ")
+    assert second.startswith(f"{BLANK} {messages.UNKNOWN_PLAYER} · ")
+
+
+def test_pairings_one_block_per_table_in_table_order(raw_fixture: LoadRaw) -> None:
+    t = _fixture(raw_fixture, "dss")
+    view = _pairings(t, 2)
+
+    (page,) = c.b2_pairings(t, view, Nav((1, 2, 3), 2))
+
+    tables = _texts(page)[1:-1]
+    assert [x.split("`")[1].rstrip(PAD) for x in tables] == [
+        f"T{n}" for n in sorted(p.table for p in view.pairings)
+    ]
+    assert c.SEPARATOR not in [b["type"] for b in _container(page)][:-3]
+    assert _texts(page)[-1].endswith("Round 2 · 16 tables")
+    assert len(_rows(page)) == 2
+
+
+# --- navigation ---------------------------------------------------------------------
 
 
 def test_single_page_disables_prev_and_next() -> None:
-    (page,) = c.b1_pages(_doc(Entry("r")))
+    (row,) = c.nav_rows(1, 1, c.NO_ROUNDS)
+    prev, indicator, nxt, refresh = row["components"]  # type: ignore[misc]
 
-    prev, indicator, nxt, refresh = _buttons(page)
     assert (prev["label"], prev["disabled"]) == (messages.PREVIOUS_PAGE, True)
     assert (indicator["label"], indicator["disabled"]) == ("1 / 1", True)
     assert (nxt["label"], nxt["disabled"]) == (messages.NEXT_PAGE, True)
@@ -150,7 +353,7 @@ def test_prev_and_next_disabled_only_at_the_ends(
     assert indicator["label"] == f"{page} / 3"
 
 
-def test_buttons_are_secondary_with_unique_custom_ids() -> None:
+def test_controls_have_unique_custom_ids() -> None:
     rows = c.nav_rows(1, 2, Nav((1, 2), 2))
     ids = [
         item["custom_id"]
@@ -159,14 +362,6 @@ def test_buttons_are_secondary_with_unique_custom_ids() -> None:
     ]
 
     assert len(ids) == len(set(ids)) == 5
-    assert all(
-        b["style"] == c.SECONDARY_BUTTON
-        for b in rows[0]["components"]  # type: ignore[attr-defined]
-    )
-
-
-def test_no_rounds_means_no_select() -> None:
-    assert len(c.nav_rows(1, 1, c.NO_ROUNDS)) == 1
 
 
 def test_round_select_marks_the_current_round() -> None:
@@ -192,246 +387,107 @@ def test_round_select_keeps_the_last_25_rounds(rounds: int, first: int) -> None:
     assert values[0] == str(first)
 
 
-# --- pages ------------------------------------------------------------------------
+# --- pages --------------------------------------------------------------------------
 
 
-def test_paginate_fills_a_page_up_to_the_budget() -> None:
-    entries = [Entry("a" * 9), Entry("b" * 9)]  # 10 each with the separator
+def test_paginate_fills_a_page_up_to_the_character_budget() -> None:
+    entries = [Entry("a" * 9), Entry("b" * 9)]  # 10 each with the line break
 
-    assert c.paginate(entries, 20) == [tuple(entries)]
-    assert c.paginate(entries, 19) == [(entries[0],), (entries[1],)]
+    assert c.paginate(entries, 20, 99) == [tuple(entries)]
+    assert c.paginate(entries, 19, 99) == [(entries[0],), (entries[1],)]
 
 
-def test_paginate_counts_the_blank_line_of_a_gap() -> None:
-    entries = [Entry("a" * 9), Entry("b" * 9, gap=True)]  # 10 + 11
+@pytest.mark.parametrize(("budget", "pages"), [(4, 1), (3, 2)])
+def test_paginate_counts_a_component_per_block(budget: int, pages: int) -> None:
+    """Four blocks of one component each; the first entry always starts one."""
+    entries = [Entry("a"), Entry("b", gap=True), Entry("c", gap=True), Entry("d", True)]
 
-    assert len(c.paginate(entries, 21)) == 1
-    assert len(c.paginate(entries, 20)) == 2
+    assert len(c.paginate(entries, 99, budget)) == pages
+
+
+def test_paginate_block_cost_counts_the_divider() -> None:
+    entries = [Entry("a"), Entry("b", gap=True)]
+
+    assert len(c.paginate(entries, 99, 4, block_cost=2)) == 1
+    assert len(c.paginate(entries, 99, 3, block_cost=2)) == 2
+
+
+def test_paginate_entries_without_gap_share_a_block() -> None:
+    entries = [Entry("a"), Entry("b"), Entry("c")]
+
+    assert len(c.paginate(entries, 99, 1)) == 1
 
 
 def test_paginate_puts_an_oversized_entry_on_its_own_page() -> None:
     entries = [Entry("a"), Entry("b" * 50), Entry("c")]
 
-    assert c.paginate(entries, 10) == [(entries[0],), (entries[1],), (entries[2],)]
+    assert c.paginate(entries, 10, 99) == [(entries[0],), (entries[1],), (entries[2],)]
 
 
 def test_paginate_empty_is_one_empty_page() -> None:
-    assert c.paginate([], 10) == [()]
+    assert c.paginate([], 10, 10) == [()]
 
 
-def test_join_entries_gap_is_ignored_at_the_top_of_a_page() -> None:
-    assert c.join_entries([Entry("a", gap=True), Entry("b"), Entry("c", gap=True)]) == (
-        "a\nb\n\nc"
-    )
+def test_split_blocks_starts_a_block_at_each_gap() -> None:
+    entries = [Entry("a", gap=True), Entry("b"), Entry("c", gap=True)]
+
+    assert c.split_blocks(entries) == ["a\nb", "c"]
 
 
-def test_b1_pages_keep_every_entry_in_order(raw_fixture: LoadRaw) -> None:
+def test_pages_keep_every_player_in_order(raw_fixture: LoadRaw) -> None:
     t = _fixture(raw_fixture, "large_top_cut")
-    doc = format_standings(t, _standings(t))
+    view = _standings(t)
 
-    pages = c.b1_pages(doc)
+    pages = c.b2_standings(t, view)
 
     assert len(pages) > 1
-    tables = [_texts(p)[1] for p in pages]
-    assert all(x.startswith(FENCE_OPEN) and x.endswith(FENCE_CLOSE) for x in tables)
-    shown = "\n\n".join(x[len(FENCE_OPEN) : -len(FENCE_CLOSE)] for x in tables)
-    assert [line for line in shown.split("\n") if line] == [
-        line for e in doc.entries for line in e.text.split("\n")
-    ]
-    assert [_buttons(p)[1]["label"] for p in pages] == [
+    shown = "\n".join(x for p in pages for x in _texts(p)[1:-1])
+    names = [line.split("**")[1] for line in shown.split("\n") if line.startswith("`")]
+    assert len(names) == len(view.players)
+    assert [_rows(p)[0][1]["label"] for p in pages] == [
         f"{n} / {len(pages)}" for n in range(1, len(pages) + 1)
     ]
 
 
-@pytest.mark.parametrize("layout", ["b1", "b2"])
-def test_every_page_stays_within_discords_text_limit(
-    raw_fixture: LoadRaw, layout: str
+@pytest.mark.parametrize("command", ["standings", "pairings"])
+@pytest.mark.parametrize("fixture", ["large_top_cut", "single_sided_top8", "dss"])
+def test_every_page_stays_within_discords_limits(
+    raw_fixture: LoadRaw, command: str, fixture: str
 ) -> None:
-    t = _fixture(raw_fixture, "large_top_cut")
-    view = _standings(t)
-    pages = (
-        c.b1_pages(format_standings(t, view))
-        if layout == "b1"
-        else c.b2_standings(t, view)
-    )
+    t = _fixture(raw_fixture, fixture)
+    if command == "standings":
+        pages = c.b2_standings(t, _standings(t))
+    else:
+        view = _pairings(t, 1)
+        pages = c.b2_pairings(t, view, Nav(tuple(range(1, 26)), 1))
 
     assert all(c.text_length(p) <= DISCORD_TEXT_LIMIT for p in pages)
+    assert all(c.component_count(p) <= DISCORD_COMPONENT_LIMIT for p in pages)
+
+
+def test_many_tables_are_split_by_the_component_limit() -> None:
+    """Each table is one component: 40 short tables cannot share a page."""
+    players = tuple(player(n) for n in range(1, 81))
+    rnd = tuple(
+        pairing(n, seat(2 * n - 1, "corp"), seat(2 * n, "runner")) for n in range(1, 41)
+    )
+    t = tournament(rnd, players=players)
+
+    pages = c.b2_pairings(t, _pairings(t, 1), Nav((1,), 1))
+
+    assert len(pages) == 2
+    assert all(c.component_count(p) <= DISCORD_COMPONENT_LIMIT for p in pages)
+
+
+def test_component_count_includes_nested_components() -> None:
+    payload = c.container([c.text("x"), *c.nav_rows(1, 1, Nav((1,), 1))])
+
+    # container, text, button row + 4 buttons, select row + select
+    assert c.component_count(payload) == 1 + 1 + 5 + 2
 
 
 def test_text_length_counts_contents_labels_and_placeholders() -> None:
-    payload = c.container(
-        [
-            c.text("abc"),
-            *c.nav_rows(1, 1, Nav((1,), 1)),
-        ]
-    )
+    payload = c.container([c.text("abc"), *c.nav_rows(1, 1, Nav((1,), 1))])
     labels = len("Prev1 / 1NextRefresh") + len("Choose a round") + len("Round 1")
 
     assert c.text_length(payload) == 3 + labels
-
-
-# --- B2 standings -------------------------------------------------------------------
-
-
-def test_standings_line_bold_name_and_points_grey_ids_and_sos() -> None:
-    p = player(
-        1,
-        "Alice",
-        rank=1,
-        points=22,
-        sos="1.8214",
-        corp="Nuvem SA: Law of the Land",
-        runner="Arissana Rocha Nahu: Street Artist",
-    )
-
-    assert c.standings_line(p) == (
-        "1\\. **Alice** — **22**\n-# Nuvem · Arissana · SoS 1.821"
-    )
-
-
-def test_standings_line_escapes_markdown_in_names() -> None:
-    p = player(1, "*bold_name~", rank=30)
-
-    first_line = c.standings_line(p).split("\n")[0]
-    assert first_line == r"30\. **\*bold\_name\~** — **0**"
-
-
-def test_standings_line_unknown_ids_show_the_placeholder() -> None:
-    p = player(1, "Alice")
-
-    assert c.standings_line(p).endswith("-# — · — · SoS 0.000")
-
-
-def test_b2_standings_blank_line_between_points_groups() -> None:
-    players = (
-        player(1, "A", rank=1, points=6),
-        player(2, "B", rank=2, points=6),
-        player(3, "C", rank=3, points=3),
-    )
-    t = tournament(
-        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=players
-    )
-
-    (page,) = c.b2_standings(t, _standings(t))
-
-    table = _texts(page)[1]
-    assert "**0**" not in table
-    assert table.count("\n\n") == 1
-    assert table.index("\n\n") > table.index("**B**")
-    assert table.index("\n\n") < table.index("**C**")
-
-
-def test_b2_standings_legend_and_no_round_select() -> None:
-    t = tournament(
-        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),),
-        players=(player(1, rank=1), player(2, rank=2)),
-    )
-
-    (page,) = c.b2_standings(t, _standings(t))
-
-    assert _texts(page)[-1] == "-# Round 1 · 2 players"
-    assert len(_rows(page)) == 1
-
-
-# --- B2 pairings --------------------------------------------------------------------
-
-PLAYERS = (
-    player(
-        1,
-        "Alice",
-        corp="Nuvem SA: Law of the Land",
-        runner="Zahya Sadeghi: Versatile Smuggler",
-    ),
-    player(
-        2,
-        "Bob",
-        corp="Haas-Bioroid: Precision Design",
-        runner="Arissana Rocha Nahu: Street Artist",
-    ),
-)
-
-
-def test_single_sided_corp_first() -> None:
-    t = tournament(players=PLAYERS)
-    p = pairing(4, seat(2, "runner", 0), seat(1, "corp", 3))
-
-    assert c.pairing_line(t, p) == (
-        "T4 · **Alice 3** – **0 Bob**\n-# C Nuvem · R Arissana"
-    )
-
-
-def test_single_sided_unreported_shows_dashes() -> None:
-    t = tournament(players=PLAYERS)
-    p = pairing(1, seat(1, "corp"), seat(2, "runner"))
-
-    assert c.pairing_line(t, p).startswith("T1 · **Alice –** – **– Bob**")
-
-
-def test_intentional_draw_shows_id() -> None:
-    t = tournament(players=PLAYERS)
-    p = pairing(1, seat(1, "corp", 1), seat(2, "runner", 1), intentional_draw=True)
-
-    assert c.pairing_line(t, p).startswith("T1 · **Alice ID** – **ID Bob**")
-
-
-def test_double_sided_totals_then_one_game_per_side() -> None:
-    t = tournament(players=PLAYERS)
-    p = pairing(2, seat(1, corp=3, runner=0), seat(2, corp=3, runner=0))
-
-    assert c.pairing_line(t, p) == (
-        "T2 · **Alice 3** – **3 Bob**\n"
-        "-# G1: C Nuvem 3 – 0 R Arissana · G2: R Zahya 0 – 3 C HB"
-    )
-
-
-def test_double_sided_half_reported() -> None:
-    t = tournament(players=PLAYERS)
-    p = pairing(2, seat(1, corp=3), seat(2, runner=0))
-
-    line, details = c.pairing_line(t, p).split("\n")
-    assert line == "T2 · **Alice 3** – **0 Bob**"
-    assert "G2: R Zahya – – – C HB" in details
-
-
-@pytest.mark.parametrize("bye_seat", [1, 2])
-def test_bye_in_either_seat(bye_seat: int) -> None:
-    t = tournament(players=PLAYERS)
-    seats = (seat(1, None, 3), seat(None))
-    p = pairing(9, *(seats if bye_seat == 2 else seats[::-1]))
-
-    assert c.pairing_line(t, p) == f"T9 · {messages.BYE} **Alice**"
-
-
-def test_unknown_player_and_escaped_names() -> None:
-    t = tournament(players=(player(1, "_under_"),))
-    p = pairing(1, seat(1, "corp", 3), seat(99, "runner", 0))
-
-    assert c.pairing_line(t, p).startswith(
-        f"T1 · **\\_under\\_ 3** – **0 {messages.UNKNOWN_PLAYER}**"
-    )
-
-
-def test_b2_pairings_sorted_by_table_with_select_and_legend(
-    raw_fixture: LoadRaw,
-) -> None:
-    t = _fixture(raw_fixture, "dss")
-    view = _pairings(t)
-
-    (page,) = c.b2_pairings(t, view, Nav((1, 2, 3), 3))
-
-    table = _texts(page)[1]
-    labels = [
-        line.split(" · ")[0] for line in table.split("\n") if line.startswith("T")
-    ]
-    assert labels == [f"T{n}" for n in sorted(p.table for p in view.pairings)]
-    assert _texts(page)[-1] == "-# Round 3 · 16 tables · G1 = game 1, G2 = game 2"
-    assert len(_rows(page)) == 2
-
-
-def test_b2_pairings_has_no_code_block(raw_fixture: LoadRaw) -> None:
-    t = _fixture(raw_fixture, "dss")
-
-    pages = c.b2_pairings(t, _pairings(t))
-
-    assert "```" not in json.dumps(pages)
-    assert "\\u001b" not in json.dumps(pages)
