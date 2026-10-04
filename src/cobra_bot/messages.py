@@ -28,7 +28,7 @@ def round_out_of_range(requested: int, last_round: int) -> str:
     )
 
 
-# --- headers and notes (SPEC §9) -------------------------------------------------
+# --- headers and notes (docs/spec/output.md) ------------------------------------------
 
 NO_COMPLETED_ROUNDS = "No completed rounds yet"
 REGISTERED_PLAYERS = "Registered players — not started yet"
@@ -95,12 +95,8 @@ def stale_tournament_private(timestamp: str) -> str:
 
 
 def player_round(round_number: int) -> str:
-    """Label above a player's pairing in the given round."""
+    """Heading of the latest round's columns in the players image."""
     return f"Round {round_number}"
-
-
-def player_not_paired(round_number: int) -> str:
-    return f"Round {round_number}: not paired"
 
 
 def more_players_matched(count: int) -> str:
@@ -137,35 +133,13 @@ RUNNER_TAG = "R"
 UNKNOWN_IDENTITY = "—"
 UNKNOWN_PLAYER = "Unknown player"
 
-# Legend words.
+# Sides.
 CORP = "Corp"
 RUNNER = "Runner"
-STANDINGS_LEGEND = f"{CORP} + SoS on line 2, {RUNNER} on line 3"
 
 
 def _count(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
-# Embed footers: a legend for the table (footers cannot show timestamps).
-
-
-def standings_footer(after_round: int | None, players: int) -> str:
-    parts = [f"Round {after_round}"] if after_round else []
-    parts += [_count(players, "player"), STANDINGS_LEGEND]
-    return " · ".join(parts)
-
-
-def pairings_footer(round_number: int, tables: int, double_sided: bool) -> str:
-    legend = (
-        "double-sided · columns = game 1 | game 2"
-        if double_sided
-        else f"{CORP} first · number = points scored"
-    )
-    return f"Round {round_number} · {_count(tables, 'table')} · {legend}"
-
-
-PLAYERS_FOOTER = f"{STANDINGS_LEGEND} · pairing: {CORP} first · number = points scored"
 
 
 def tournament_fallback_name(tournament_id: int) -> str:
@@ -251,7 +225,7 @@ def compact_players_footer(round_number: int | None, players: int) -> str:
     return " · ".join([*parts, _count(players, "player")])
 
 
-# --- command registration (SPEC §2) --------------------------------------------
+# --- command registration (docs/spec/architecture.md) ---------------------------------
 
 COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
 PAIRINGS_DESCRIPTION = "Show pairings for a round, Swiss or top cut"

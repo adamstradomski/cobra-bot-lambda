@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register the global `/cobra` command with Discord (task T22, SPEC §2).
+"""Register the global `/cobra` command with Discord (docs/spec/architecture.md).
 
 Overwrites the application's global commands with the definition in
 `cobra_bot.registration`. Runs in the project environment: `uv run

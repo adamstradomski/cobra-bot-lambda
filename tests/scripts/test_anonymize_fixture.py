@@ -166,6 +166,7 @@ def test_ranks_scores_and_structure_are_unchanged(anonymizer: ModuleType) -> Non
     assert strip(fixture) == strip(raw)
 
 
+@pytest.mark.req("NFR-11")
 def test_no_original_personal_data_remains(anonymizer: ModuleType) -> None:
     raw = _raw()
     text = json.dumps(anonymizer.anonymize(raw), ensure_ascii=False)

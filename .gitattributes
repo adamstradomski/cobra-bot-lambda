@@ -1,2 +1,1 @@
-tests/golden/*.json text eol=lf
 *.ttf binary

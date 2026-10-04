@@ -12,7 +12,6 @@ from cobra_bot.formatting.text import (
     display_width,
     escape_markdown,
     fit,
-    pad,
     runner_label,
     short_identity,
     standings_url,
@@ -73,9 +72,9 @@ COMBINING_DIAERESIS = chr(0x0308)
     ("name", "safe"),
     [
         ("@Mention", "@Mention"),  # pings are blocked by allowed_mentions (AC-21)
-        ("*bold_name~", "*bold_name~"),  # markdown does not render in code blocks
+        ("*bold_name~", "*bold_name~"),  # images do not render markdown
         (r"back\slash", r"back\slash"),
-        ("a`b", "a'b"),  # C-7
+        ("a`b", "a'b"),  # cannot close a code block
         ("```@everyone", "'''@everyone"),
         (f"red{ESC}[1;31mname", "red[1;31mname"),
         (f"bell{chr(7)}zero{chr(0x200B)}width", "bellzerowidth"),
@@ -108,7 +107,7 @@ def test_code_text(name: str, safe: str) -> None:
     ("text", "width"),
     [
         ("abc", 3),
-        ("Żółw", 4),  # diacritics take one column (C-5)
+        ("Żółw", 4),  # diacritics take one column
         (f"Mae{COMBINING_DIAERESIS}lig", 6),  # combining marks take none
         (f"a{CJK}b", 4),  # wide characters take two
         (f"a{EMOJI}b", 4),
@@ -134,19 +133,7 @@ def test_fit(text: str, width: int, fitted: str) -> None:
     assert fit(text, width) == fitted
 
 
-def test_twenty_character_name_is_cut_to_fifteen_plus_ellipsis() -> None:
-    """Embed format acceptance 4."""
-    assert fit("A" * 20, 16) == "A" * 15 + "…"
-
-
-@pytest.mark.parametrize(
-    ("text", "padded"),
-    [("ab", "ab   "), (f"{EMOJI}a", f"{EMOJI}a  "), ("abcdef", "abcdef")],
-)
-def test_pad_uses_display_width(text: str, padded: str) -> None:
-    assert pad(text, 5) == padded
-
-
+@pytest.mark.req("FR-08")
 @pytest.mark.parametrize(
     ("identity", "label"),
     [
@@ -172,6 +159,7 @@ def test_corp_label(identity: str | None, label: str) -> None:
     assert corp_label(identity) == label
 
 
+@pytest.mark.req("FR-08")
 @pytest.mark.parametrize(
     ("identity", "label"),
     [
@@ -200,6 +188,7 @@ def test_short_names_fit_the_column() -> None:
         assert code_text(name) == name, name
 
 
+@pytest.mark.req("FR-08")
 def test_missing_id_is_logged_once(caplog: pytest.LogCaptureFixture) -> None:
     """A-2 / acceptance 6: a fallback logs a warning, once per ID."""
     with caplog.at_level(logging.WARNING):
@@ -255,6 +244,7 @@ def test_round_out_of_range_message() -> None:
     )
 
 
+@pytest.mark.req("FR-08")
 def test_a_later_id_with_a_known_prefix_gets_the_prefix_short_name(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

@@ -1,5 +1,5 @@
-"""template.yaml (SPEC §11): the settings that protect users and the bill, and
-consistency with the code it deploys."""
+"""template.yaml (docs/spec/architecture.md): the settings that protect users and
+the bill, and consistency with the code it deploys."""
 
 import importlib
 import tomllib
@@ -10,6 +10,9 @@ import pytest
 import yaml
 
 from cobra_bot.handlers import interactions, worker
+
+pytestmark = pytest.mark.req("NFR-14")
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,6 +40,7 @@ def _props(template: Template, name: str) -> dict[str, Any]:
 # --- AC-23 ---------------------------------------------------------------------------
 
 
+@pytest.mark.req("NFR-06", "AC-23")
 def test_ac23_worker_is_never_retried(template: Template) -> None:
     """NFR-06: a retried Worker would post duplicate messages."""
     config = _props(template, "WorkerFunction")["EventInvokeConfig"]
@@ -44,15 +48,17 @@ def test_ac23_worker_is_never_retried(template: Template) -> None:
     assert config["MaximumRetryAttempts"] == 0
 
 
+@pytest.mark.req("NFR-09", "AC-23")
 def test_ac23_cache_bucket_expires_objects(template: Template) -> None:
     rules = _props(template, "CacheBucket")["LifecycleConfiguration"]["Rules"]
 
     assert {"Status": "Enabled", "ExpirationInDays": 1}.items() <= rules[0].items()
 
 
-# --- other SPEC §11 settings ----------------------------------------------------------
+# --- other settings (docs/spec/architecture.md) -------------------------------------
 
 
+@pytest.mark.req("NFR-06")
 def test_worker_events_expire_with_the_interaction_token(template: Template) -> None:
     """Interaction tokens live 15 minutes; older queued events are useless."""
     config = _props(template, "WorkerFunction")["EventInvokeConfig"]
@@ -86,11 +92,13 @@ def test_interactions_function_url_is_public(template: Template) -> None:
     assert url == {"AuthType": "NONE"}
 
 
+@pytest.mark.req("NFR-12")
 @pytest.mark.parametrize("group", ["WorkerLogGroup", "InteractionsLogGroup"])
 def test_logs_are_kept_14_days(template: Template, group: str) -> None:
     assert _props(template, group)["RetentionInDays"] == 14
 
 
+@pytest.mark.req("NFR-12")
 @pytest.mark.parametrize(
     ("function", "group"),
     [
@@ -104,6 +112,7 @@ def test_functions_log_to_their_groups(
     assert _props(template, function)["LoggingConfig"] == {"LogGroup": {"Ref": group}}
 
 
+@pytest.mark.req("NFR-13")
 def test_budget_is_5_usd_per_month(template: Template) -> None:
     budget = _props(template, "MonthlyBudget")["Budget"]
 
@@ -113,6 +122,7 @@ def test_budget_is_5_usd_per_month(template: Template) -> None:
     )
 
 
+@pytest.mark.req("NFR-13")
 def test_budget_alerts_go_to_the_email_parameter(template: Template) -> None:
     notifications = _props(template, "MonthlyBudget")["NotificationsWithSubscribers"]
 
@@ -123,7 +133,7 @@ def test_budget_alerts_go_to_the_email_parameter(template: Template) -> None:
         ]
 
 
-# --- least privilege (SPEC §10) -------------------------------------------------------
+# --- least privilege (docs/spec/architecture.md) --------------------------------------
 
 
 def test_interactions_may_only_invoke_the_worker(template: Template) -> None:
@@ -134,6 +144,7 @@ def test_interactions_may_only_invoke_the_worker(template: Template) -> None:
     ]
 
 
+@pytest.mark.req("NFR-02")
 def test_worker_may_only_use_its_bucket(template: Template) -> None:
     (policy,) = _props(template, "WorkerFunction")["Policies"]
     statements = {s["Sid"]: s for s in policy["Statement"]}
@@ -149,6 +160,7 @@ def test_worker_may_only_use_its_bucket(template: Template) -> None:
     assert all(s["Effect"] == "Allow" for s in statements.values())
 
 
+@pytest.mark.req("NFR-08")
 def test_no_function_reads_ssm(template: Template) -> None:
     """NFR-08: nothing deployed needs a secret."""
     text = (ROOT / "template.yaml").read_text(encoding="utf-8").lower()
@@ -174,6 +186,7 @@ def test_handlers_exist(template: Template, function: str) -> None:
     assert callable(getattr(importlib.import_module(module_name), attribute))
 
 
+@pytest.mark.req("NFR-08")
 @pytest.mark.parametrize(
     ("function", "names"),
     [
@@ -222,6 +235,7 @@ def test_lambda_requirements_match_the_lock_file() -> None:
     assert {n: by_name[n]["version"] for n in runtime} == pinned
 
 
+@pytest.mark.req("NFR-04")
 def test_interactions_function_has_cpu_for_a_cold_start(template: Template) -> None:
     """NFR-04: at 256 MB a cold start missed Discord's 3 s acknowledgement limit."""
     assert _props(template, "InteractionsFunction")["MemorySize"] == 512

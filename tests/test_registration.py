@@ -1,5 +1,7 @@
 from typing import Any
 
+import pytest
+
 from cobra_bot.registration import command_definition
 
 
@@ -8,6 +10,7 @@ def _options(definition: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {o["name"]: o for o in definition["options"]}
 
 
+@pytest.mark.req("FR-18", "AC-24")
 def test_ac24_integration_types_and_contexts() -> None:
     definition = command_definition()
 
@@ -64,3 +67,10 @@ def test_descriptions_fit_discord_limits() -> None:
         descriptions += [o["description"] for o in sub["options"]]
 
     assert all(1 <= len(d) <= 100 for d in descriptions)
+
+
+@pytest.mark.req("NFR-01")
+def test_commands_have_no_role_restrictions() -> None:
+    """NFR-01: no `default_member_permissions`, so everyone who can use
+    application commands can use the bot."""
+    assert "default_member_permissions" not in command_definition()

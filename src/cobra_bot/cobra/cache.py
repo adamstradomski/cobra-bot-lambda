@@ -1,4 +1,5 @@
-"""Shared tournament cache over a `CacheStore` (SPEC §7, NFR-02, FR-15, FR-21).
+"""Shared tournament cache over a `CacheStore` (docs/spec/cache.md; NFR-02,
+FR-15, FR-21).
 
 - Fresh entry (age ≤ `TTL`, 60 s): served without contacting Cobra.
 - Expired or missing: fetch from Cobra, store, serve.

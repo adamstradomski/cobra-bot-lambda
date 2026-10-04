@@ -1,1 +1,1 @@
-"""Pure text formatting: entries, documents and Discord-sized chunks. No I/O."""
+"""Pure formatting: reply images, their embeds and text helpers. No I/O."""

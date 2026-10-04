@@ -1,4 +1,4 @@
-"""Standings and pairings as PNG images (SPEC §9), drawn with the bundled fonts."""
+"""Reply tables as PNG images (docs/spec/output.md), drawn with the bundled fonts."""
 
 import io
 from collections.abc import Callable
@@ -20,7 +20,7 @@ from cobra_bot.domain.rounds import (
     standings_view,
 )
 from cobra_bot.formatting import image as c
-from cobra_bot.formatting.document import EMBED_COLOR
+from cobra_bot.formatting.embed import EMBED_COLOR
 from cobra_bot.formatting.image import Cell, Column, Fonts, Table
 from cobra_bot.formatting.text import corp_label, runner_label
 
@@ -52,6 +52,7 @@ PLAYERS = (
 # --- standings ----------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-07")
 def test_standings_columns_ids_before_points_and_sos() -> None:
     t = tournament(
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
@@ -69,6 +70,7 @@ def test_standings_columns_ids_before_points_and_sos() -> None:
     ]
 
 
+@pytest.mark.req("FR-07")
 def test_standings_row_values_and_colours() -> None:
     t = tournament(
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
@@ -100,6 +102,7 @@ def test_standings_groups_by_points() -> None:
     assert [len(g) for g in groups] == [2, 1]
 
 
+@pytest.mark.req("NFR-10")
 def test_long_names_and_ids_are_cut_and_made_safe() -> None:
     p = player(1, "A" * 40 + "\x1b[31m", corp="X" * 40)
     t = tournament((pairing(1, seat(1, "corp", 3), seat(None)),), players=(p,))
@@ -114,6 +117,7 @@ def _id_cell(identity: str, color: str) -> str:
     return c._identity(identity, color).text
 
 
+@pytest.mark.req("FR-08")
 @pytest.mark.parametrize(
     ("identity", "color", "shown"),
     [
@@ -155,6 +159,7 @@ def test_unknown_identity_is_the_secondary_dash() -> None:
 # --- pairings -----------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-04")
 def test_single_sided_corp_first_winner_bold_loser_secondary() -> None:
     t = tournament(players=PLAYERS)
     view = PairingsView(
@@ -179,6 +184,7 @@ def test_single_sided_corp_first_winner_bold_loser_secondary() -> None:
     assert not loser[1].bold and loser[1].color == c.SECONDARY
 
 
+@pytest.mark.req("FR-04")
 @pytest.mark.parametrize(
     ("first", "second", "draw", "shown"),
     [
@@ -223,6 +229,7 @@ def test_double_sided_columns_and_game_cells() -> None:
     ]
 
 
+@pytest.mark.req("FR-04")
 @pytest.mark.parametrize(("sides", "columns"), [("corp", 5), (None, 7)])
 def test_bye_row_fills_every_column(sides: str | None, columns: int) -> None:
     t = tournament(players=PLAYERS)
@@ -479,6 +486,7 @@ def test_pages_after_the_first_have_only_image_and_legend(
         )
 
 
+@pytest.mark.req("FR-14", "AC-15")
 @pytest.mark.parametrize(
     ("players", "messages_sent", "omitted"),
     [(10, 5, 0), (11, 5, 1), (9, 5, 0), (12, 5, 2)],
@@ -543,7 +551,7 @@ def test_one_page_header_and_omission_together(
     fonts: Fonts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(c, "MAX_ROWS", 2)
-    monkeypatch.setattr(c, "MAX_MESSAGES", 1)
+    monkeypatch.setattr(c, "MAX_PAGES", 1)
     t = _standings_cup(3)
 
     (page,) = c.standings_images(t, _standings(t), fonts)
@@ -553,6 +561,7 @@ def test_one_page_header_and_omission_together(
     assert note.startswith("…and 1 more — ")
 
 
+@pytest.mark.req("FR-14", "AC-14")
 def test_large_tournament_fits_the_limits(raw_fixture: LoadRaw, fonts: Fonts) -> None:
     """AC-14: 235 players: at most 5 messages, one image each, under Discord's
     10 MB attachment limit, every player once, in rank order."""
@@ -634,6 +643,7 @@ def test_bundled_fonts_have_their_licence() -> None:
 # --- acceptance criteria on the image tables --------------------------------------
 
 
+@pytest.mark.req("FR-07", "AC-01")
 def test_ac01_standings_first_row(raw_fixture: LoadRaw) -> None:
     """AC-01: after round 8, player 1042 first with 22 points."""
     t = parse_tournament(
@@ -647,6 +657,7 @@ def test_ac01_standings_first_row(raw_fixture: LoadRaw) -> None:
     assert (first[0].text, first[1].text, first[4].text) == ("1", "Player0042", "22")
 
 
+@pytest.mark.req("FR-04", "AC-02")
 def test_ac02_bye_at_table_21(raw_fixture: LoadRaw) -> None:
     """AC-02: round 1, table 21 is player 1023's bye."""
     t = parse_tournament(
@@ -660,6 +671,7 @@ def test_ac02_bye_at_table_21(raw_fixture: LoadRaw) -> None:
     assert ["T21", "Player0023", messages.BYE, "", ""] in rows
 
 
+@pytest.mark.req("FR-05", "AC-22")
 def test_ac22_double_sided_shows_both_games(raw_fixture: LoadRaw) -> None:
     """AC-22: every double-sided table shows game 1 and game 2 per player."""
     t = parse_tournament(raw_fixture("dss"), tournament_id=5018, fetched_at=FETCHED_AT)
@@ -686,6 +698,7 @@ def _player_row(t: Tournament, pid: int) -> list[str]:
     return [cell.text for cell in group[0]]
 
 
+@pytest.mark.req("FR-10")
 def test_players_table_columns_after_a_round() -> None:
     t = tournament(
         (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),), players=PLAYERS
@@ -902,6 +915,7 @@ def test_cut_pairings_columns_name_the_game_and_the_result() -> None:
     ]
 
 
+@pytest.mark.req("FR-02")
 def test_cut_game_winner_bold_with_w_loser_secondary_with_l() -> None:
     t = _cut_game(2)
     ((corp, runner),) = c.pairings_table(t, _pairings(t)).groups
@@ -920,6 +934,7 @@ def test_unreported_cut_game_shows_dashes_and_plain_names() -> None:
     assert not corp[1].bold and not runner[1].bold
 
 
+@pytest.mark.req("FR-10")
 def test_player_row_in_a_cut_game_shows_w_or_l() -> None:
     t = _cut_game(2)
 
@@ -953,6 +968,7 @@ def test_top_cut_table_columns() -> None:
     ]
 
 
+@pytest.mark.req("FR-23")
 def test_top_cut_rows_still_in_bold_out_secondary_undecided_rank_blank() -> None:
     view = TopCutView(
         2,

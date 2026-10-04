@@ -44,7 +44,7 @@ Every command starts with `/cobra` and takes a `tournament`: the Cobra tournamen
 
 ### How it works
 
-Discord sends each `/cobra` command over HTTP to a small Lambda function (`InteractionsFunction`), which checks Discord's signature, acknowledges within Discord's 3-second limit and hands the work to a second function (`WorkerFunction`). The Worker reads the tournament from Cobra through a shared S3 cache (60 s for Cobra data, 10 minutes for drawn pictures), draws the reply and sends it back through Discord's webhook. The bot needs no bot user, no permissions and no Gateway connection; only the `applications.commands` scope. The full design is in [`docs/spec.md`](docs/spec.md).
+Discord sends each `/cobra` command over HTTP to a small Lambda function (`InteractionsFunction`), which checks Discord's signature, acknowledges within Discord's 3-second limit and hands the work to a second function (`WorkerFunction`). The Worker reads the tournament from Cobra through a shared S3 cache (60 s for Cobra data, 10 minutes for drawn pictures), draws the reply and sends it back through Discord's webhook. The bot needs no bot user, no permissions and no Gateway connection; only the `applications.commands` scope. The full design is in [`docs/spec/`](docs/spec/).
 
 ```
 src/cobra_bot/
@@ -83,7 +83,6 @@ uv run scripts/preview.py tests/fixtures/single_sided_top8.json bracket
 | `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
-| `UPDATE_GOLDEN=1 uv run pytest tests/formatting/test_golden.py` | Rewrites the golden files in `tests/golden/` (the code-block embed payloads of the standings and pairings formatters for the `single_sided_top8` and `dss` fixtures; the bot now sends these two as pictures, and player cards use the same rows) from the current renderer instead of comparing against them. Review the diff before committing; without the variable the test fails on any difference. |
 | `uv run scripts/preview.py SOURCE COMMAND` | Posts a reply rendered from a local Cobra export to your Discord test channel, without deploying ([details](docs/scripts.md#scriptspreviewpy--see-a-reply-in-discord-without-deploying)). |
 | `sam validate --lint` | Checks [`template.yaml`](template.yaml) with the SAM translator and cfn-lint. Needs no AWS credentials. |
 | `sam build` | Builds both functions from `src/` into `.aws-sam/build/` (git-ignored). It installs `src/requirements.txt` with Linux wheels for the Lambda runtime and needs `python3.14` on `PATH`. |
@@ -225,10 +224,9 @@ Options, inputs, outputs and exit codes of each script are in [`docs/scripts.md`
 | Document | Contents |
 |----------|----------|
 | [`docs/requirements.md`](docs/requirements.md) | What the bot must do, and what is out of scope. |
-| [`docs/spec.md`](docs/spec.md) | Design: commands, data model, cache, output, infrastructure, acceptance criteria. |
-| [`docs/embeded_format.md`](docs/embeded_format.md) | The exact layout of every reply. |
-| [`docs/findings.md`](docs/findings.md) | How Cobra's export actually behaves, from captured snapshots and Cobra's source. |
-| [`docs/tasks.md`](docs/tasks.md) | The implementation plan, task by task. |
+| [`docs/spec/`](docs/spec/) | Design, one file per area: [architecture](docs/spec/architecture.md) (commands, security, infrastructure), [Cobra](docs/spec/cobra.md) (references, HTTP, export format), [cache](docs/spec/cache.md), [domain](docs/spec/domain.md) (rounds, top cut, search), [output](docs/spec/output.md) (the layout of every reply), [fixtures](docs/spec/fixtures.md), [acceptance criteria](docs/spec/acceptance-criteria.md). |
+| [`docs/decisions.md`](docs/decisions.md) | Why the bot is built the way it is. |
+| [`docs/archive/`](docs/archive/) | Superseded documents: the old single spec, Cobra findings with their evidence, the build plan. |
 | [`docs/acceptance.md`](docs/acceptance.md) | The manual acceptance checklist for a deployed bot. |
 | [`docs/scripts.md`](docs/scripts.md) | Every script in detail. |
 | [`docs/automatic-deployment.md`](docs/automatic-deployment.md) | Deploying from `main` with GitHub Actions. |

@@ -1,7 +1,7 @@
 """Logging for the Lambda entry points.
 
 The Lambda Python runtime only passes WARNING and above by default, which would
-hide the INFO lines SPEC §10 asks for (command, tournament, stale flag,
+hide the INFO lines docs/spec/architecture.md asks for (command, tournament, stale flag,
 duration). Called once per cold start by each handler, never at import, so
 tests keep their logging configuration.
 """

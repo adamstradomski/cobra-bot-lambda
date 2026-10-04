@@ -106,6 +106,7 @@ def _conflict(stubber: Stubber, code: str = "PreconditionFailed") -> None:
     )
 
 
+@pytest.mark.req("NFR-03")
 def test_lock_is_created_with_if_none_match(s3: tuple[Any, Stubber]) -> None:
     client, stubber = s3
     stubber.add_response(

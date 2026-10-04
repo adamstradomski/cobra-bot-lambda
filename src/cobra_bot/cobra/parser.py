@@ -1,4 +1,4 @@
-"""Raw Cobra JSON export -> domain models (SPEC §4).
+"""Raw Cobra JSON export -> domain models (docs/spec/cobra.md).
 
 Tolerant by design (the export is not an official API): unknown keys are
 ignored, numbers may arrive as strings, optional fields may be missing.

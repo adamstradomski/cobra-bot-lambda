@@ -1,7 +1,7 @@
-"""HTTP access to Cobra (SPEC §6, §7; NFR-16).
+"""HTTP access to Cobra (docs/spec/cobra.md; NFR-16).
 
 Redirects are never followed: Cobra signals "not found" and "private" through
-them (docs/findings.md Q4, Q5), and outbound requests must stay on Cobra.
+them (docs/spec/cobra.md), and outbound requests must stay on Cobra.
 
 | Response                                   | Tournament JSON | Shortcode      |
 |--------------------------------------------|-----------------|----------------|

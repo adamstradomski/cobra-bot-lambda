@@ -1,4 +1,4 @@
-"""The global `/cobra` command as registered with Discord (SPEC §2).
+"""The global `/cobra` command as registered with Discord (docs/spec/architecture.md).
 
 A public contract: names, options, integration types and contexts must not
 change without the author's approval (CLAUDE.md).

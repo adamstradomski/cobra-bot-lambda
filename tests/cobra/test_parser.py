@@ -114,7 +114,7 @@ def test_double_sided_pairing(raw_fixture: LoadRaw) -> None:
 
 
 def test_bye_in_player1_slot(raw_fixture: LoadRaw) -> None:
-    """findings Q3: in dss round 2 the bye has player1.id == null."""
+    """docs/spec/cobra.md: in dss round 2 the bye has player1.id == null."""
     pairing = _pairing(_parse(raw_fixture("dss")), 2, 16)
 
     assert pairing.is_bye
@@ -124,7 +124,7 @@ def test_bye_in_player1_slot(raw_fixture: LoadRaw) -> None:
 
 
 def test_unreported_double_sided_scores_are_none(raw_fixture: LoadRaw) -> None:
-    """findings Q1: unreported results are null; round 3 of dss is unreported."""
+    """docs/spec/cobra.md: unreported results are null; round 3 of dss is unreported."""
     pairing = next(p for p in _parse(raw_fixture("dss")).rounds[2] if not p.is_bye)
 
     assert pairing.seat1 == Seat(pairing.seat1.player_id, None, None, None, None, None)

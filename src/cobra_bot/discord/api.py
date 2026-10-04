@@ -1,5 +1,5 @@
 """Discord interaction webhooks: edit the deferred response, post follow-ups
-(SPEC §3, §9; NFR-06, NFR-10).
+(docs/spec/architecture.md, output.md; NFR-06, NFR-10).
 
 - Every payload sets `allowed_mentions: {"parse": []}` so nothing pings.
 - Only HTTP 429 is retried, after `Retry-After` (Discord did not process the
@@ -15,8 +15,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from cobra_bot.formatting.chunking import FIELD_NAME, Embed, ImagePage, Message
-from cobra_bot.formatting.document import EMBED_COLOR
+from cobra_bot.formatting.embed import EMBED_COLOR, Embed, ImagePage
 
 DISCORD_API = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (https://github.com/adamstradomski/cobra-bot-lambda, 0.1)"
@@ -64,11 +63,6 @@ def embed_payload(embed: Embed) -> Payload:
         payload["url"] = embed.url
     if embed.color is not None:
         payload["color"] = embed.color
-    if embed.fields:
-        payload["fields"] = [
-            {"name": FIELD_NAME, "value": value, "inline": False}
-            for value in embed.fields
-        ]
     if embed.image is not None:
         payload["image"] = {"url": f"attachment://{embed.image}"}
     if embed.footer is not None:
@@ -104,8 +98,8 @@ def image_files(pages: Sequence[ImagePage]) -> tuple[Attachment, ...]:
 
 
 def text_payload(text: str) -> Payload:
-    """A single-embed reply, e.g. an error message: one sentence, no code block,
-    in the bot colour (embed format C-2, C-12)."""
+    """A single-embed reply, e.g. an error message: one sentence in the bot
+    colour (docs/spec/output.md)."""
     return message_payload([Embed(description=text, color=EMBED_COLOR)])
 
 
@@ -122,14 +116,9 @@ class WebhookClient:
         self._sleep = sleep
         self._base_url = base_url.rstrip("/")
 
-    def send(self, token: str, messages: Sequence[Message]) -> None:
-        """First message edits the deferred response; the rest are follow-ups.
-        Every reply is public."""
-        for index, message in enumerate(messages):
-            if index == 0:
-                self.edit_original(token, message_payload(message))
-            else:
-                self.follow_up(token, message_payload(message))
+    def send_embed(self, token: str, embed: Embed) -> None:
+        """One embed without an image, in place of the deferral."""
+        self.edit_original(token, message_payload([embed]))
 
     def send_images(self, token: str, pages: Sequence[ImagePage]) -> None:
         """Every page in one message, in place of the deferral."""

@@ -1,4 +1,4 @@
-"""Tournament data model (SPEC §4, adjusted by docs/findings.md)."""
+"""Tournament data model (docs/spec/cobra.md)."""
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -43,14 +43,14 @@ class Pairing:
 
     @property
     def is_bye(self) -> bool:
-        """A bye has no player in one seat; it can be either seat (findings Q3)."""
+        """A bye has no player in one seat; it can be either seat."""
         return self.seat1.player_id is None or self.seat2.player_id is None
 
     @property
     def double_sided(self) -> bool:
         """Double-sided Swiss pairings carry both games per seat and no role.
 
-        Single-sided games always have roles; only byes lack them (findings Q3).
+        Single-sided games always have roles; only byes lack them (docs/spec/cobra.md).
         """
         return (
             not self.is_bye

@@ -3,6 +3,9 @@ from nacl.signing import SigningKey
 
 from cobra_bot.discord.verify import SignatureVerifier
 
+pytestmark = pytest.mark.req("NFR-07")
+
+
 BODY = b'{"type": 1}'
 TIMESTAMP = "1790856000"
 

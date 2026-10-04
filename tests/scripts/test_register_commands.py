@@ -61,6 +61,7 @@ def test_missing_credentials_is_a_usage_error(
     assert seen == []
 
 
+@pytest.mark.req("NFR-08")
 def test_http_error_fails_without_printing_the_token(
     register_script: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:

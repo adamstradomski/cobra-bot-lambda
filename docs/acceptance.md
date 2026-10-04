@@ -49,7 +49,7 @@ Task T25. Run against a deployed stack (README, Deployment) and a real Cobra tou
 | # | Check | Expected | Result |
 |---|-------|----------|--------|
 | C1 | Any reply with a player name containing `@`, `*`, `_` or `~` (if the tournament has one) | Shown literally; nobody is pinged; no formatting applied | |
-| C2 | CloudWatch logs of both functions after the run | No interaction tokens, bot token or full Cobra/Discord payloads (NFR-12, SPEC §10) | |
+| C2 | CloudWatch logs of both functions after the run | No interaction tokens, bot token or full Cobra/Discord payloads (NFR-12, `docs/spec/architecture.md`) | |
 
 ## Issues filed
 

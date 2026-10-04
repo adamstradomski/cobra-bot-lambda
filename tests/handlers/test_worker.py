@@ -78,6 +78,7 @@ def _job(command: Command) -> dict[str, object]:
     return Job("app-1", "tok-1", command).to_payload()
 
 
+@pytest.mark.req("FR-01")
 def test_pairings_end_to_end() -> None:
     discord = Discord()
 

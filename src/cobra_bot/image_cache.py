@@ -1,4 +1,4 @@
-"""Cache of drawn reply images, separate from the Cobra data cache (SPEC §7).
+"""Cache of drawn reply images, separate from the Cobra data cache (docs/spec/cache.md).
 
 The Cobra cache keeps tournament data for 60 s. Drawing the images is the slow
 part of a reply, and when the data has not changed the images would be drawn

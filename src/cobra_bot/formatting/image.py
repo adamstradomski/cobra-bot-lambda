@@ -1,10 +1,11 @@
-"""Standings, pairings and player cards as a PNG image in an embed (SPEC §9).
+"""Standings, pairings, top cut and players found as a PNG image in an embed
+(docs/spec/output.md).
 
-Full colours on every client, real columns with headings, names and IDs not cut
-to code-block widths. The text cannot be selected or searched. The embed keeps
-the title link and header lines of `format_standings` / `format_pairings` and a
-short legend; a long table is split evenly into pages of at most `MAX_ROWS`
-rows, at most `MAX_MESSAGES`, an embed each, all sent in one message.
+Full colours on every client and real columns with headings. The text cannot be
+selected or searched. The embed holds the title link and header lines
+(`formatting.header`) and a short legend; a long table is split evenly into
+pages of at most `MAX_ROWS` rows, at most `MAX_PAGES`, an embed each, all sent
+in one message.
 
 Drawing is in memory and the fonts are injected (`cobra_bot.fonts.load`), so
 this module touches no files.
@@ -24,29 +25,15 @@ from cobra_bot.domain.bracket import CutEntry, TopCutView
 from cobra_bot.domain.models import Pairing, Player, Seat, Tournament
 from cobra_bot.domain.rounds import PairingsView, StandingsView
 from cobra_bot.domain.search import NamesResult
-from cobra_bot.formatting.chunking import DISCORD_LIMITS, Embed, ImagePage
-from cobra_bot.formatting.document import (
-    EMBED_COLOR,
-    Document,
-    data_line,
-    heading,
-)
-from cobra_bot.formatting.pairings import format_pairings, table_label
-from cobra_bot.formatting.players import format_player_cards
-from cobra_bot.formatting.standings import format_standings
-from cobra_bot.formatting.text import (
-    code_text,
-    corp_label,
-    fit,
-    runner_label,
-    standings_url,
-)
+from cobra_bot.formatting import header
+from cobra_bot.formatting.embed import EMBED_COLOR, MAX_PAGES, Embed, ImagePage
+from cobra_bot.formatting.header import Header
+from cobra_bot.formatting.text import code_text, corp_label, fit, runner_label
 
 # Bump when the drawing changes in a way the cells, style constants and fonts in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
 RENDER_VERSION = 1
 MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 pages
-MAX_MESSAGES = DISCORD_LIMITS.messages
 CUT_SIZES = (8, 16, 32)  # rows the first of several pages holds at least
 NAME_CHARS = 28
 
@@ -255,6 +242,11 @@ def pairings_table(t: Tournament, view: PairingsView) -> Table:
     )
 
 
+def table_label(pairing: Pairing) -> str:
+    """`T12` for a table, `G12` for a top-cut game."""
+    return f"{'G' if pairing.elimination else 'T'}{pairing.table}"
+
+
 def _single_sided(t: Tournament, pairing: Pairing) -> Group:
     label = table_label(pairing)
     if pairing.is_bye:
@@ -324,8 +316,8 @@ type Style = tuple[str, bool]  # colour, bold
 def _styles(
     pairing: Pairing, first: int | None, second: int | None
 ) -> tuple[tuple[str, Style], tuple[str, Style]]:
-    """Points as shown and the name style: the winner bold, the loser secondary
-    (as in format A)."""
+    """Points as shown and the name style: the winner bold, the loser
+    secondary."""
     plain: Style = (TEXT, False)
     if pairing.intentional_draw:
         return (messages.INTENTIONAL_DRAW, plain), (messages.INTENTIONAL_DRAW, plain)
@@ -537,10 +529,9 @@ def standings_images(
     private: bool = False,
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
-    doc = format_standings(t, view, private=private)
     footer = messages.compact_standings_footer(view.after_round, len(view.players))
     return image_pages(
-        doc,
+        header.standings(t, view, private=private),
         standings_table(view),
         footer,
         fonts,
@@ -558,14 +549,13 @@ def pairings_images(
     private: bool = False,
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
-    doc = format_pairings(t, view, private=private)
     footer = (
         messages.compact_cut_pairings_footer(view.round_number, len(view.pairings))
         if view.cut_round
         else messages.compact_pairings_footer(view.round_number, len(view.pairings))
     )
     return image_pages(
-        doc,
+        header.pairings(t, view, private=private),
         pairings_table(t, view),
         footer,
         fonts,
@@ -583,18 +573,15 @@ def top_cut_images(
     private: bool = False,
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
-    doc = Document(
-        title=t.name,
-        url=standings_url(t.id),
-        header=(
-            heading(messages.top_cut_header(view.size, view.status)),
-            data_line(t, private=private),
-        ),
-        entries=(),
-    )
     footer = messages.compact_top_cut_footer(view.size, len(view.entries))
     return image_pages(
-        doc, top_cut_table(view), footer, fonts, "top-cut", row_entries=True, draw=draw
+        header.top_cut(t, view, private=private),
+        top_cut_table(view),
+        footer,
+        fonts,
+        "top-cut",
+        row_entries=True,
+        draw=draw,
     )
 
 
@@ -609,10 +596,9 @@ def player_images(
 ) -> tuple[ImagePage, ...]:
     """The players found, as rows (`players_table`); the header names the
     query and the notes say which names matched nobody or more."""
-    doc = format_player_cards(t, result, query, private=private)
     footer = messages.compact_players_footer(len(t.rounds) or None, len(result.matches))
     return image_pages(
-        doc,
+        header.players(t, result, query, private=private),
         players_table(t, result.matches),
         footer,
         fonts,
@@ -677,7 +663,7 @@ def _fill(
 
 
 def image_pages(
-    doc: Document,
+    head: Header,
     table: Table,
     footer: str,
     fonts: Fonts,
@@ -686,31 +672,31 @@ def image_pages(
     row_entries: bool,
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
-    """One embed and image per page, at most `MAX_MESSAGES` pages. The first has
+    """One embed and image per page, at most `MAX_PAGES` pages. The first has
     the title, link and header; every one has the legend, and the page number
     when there are several. Pages past the limit are dropped and the last says how
     many entries are missing, with the Cobra link (FR-14). An entry is a row
     with `row_entries` (a player; groups may then break across pages), else a
     group (a table, kept whole). `draw` replaces `render_png` (image cache)."""
     pages = paginate_groups(
-        table.groups, MAX_ROWS, split=row_entries, max_pages=MAX_MESSAGES
+        table.groups, MAX_ROWS, split=row_entries, max_pages=MAX_PAGES
     )
-    kept = pages[:MAX_MESSAGES]
+    kept = pages[:MAX_PAGES]
     omitted = sum(
         sum(len(g) for g in page) if row_entries else len(page)
-        for page in pages[MAX_MESSAGES:]
+        for page in pages[MAX_PAGES:]
     )
     out = []
     for number, groups in enumerate(kept, start=1):
         first, last = number == 1, number == len(kept)
-        lines = [*doc.header, *doc.notes] if first else []
+        lines = [*head.lines, *head.notes] if first else []
         if last and omitted:
-            lines.append(messages.omitted_entries(omitted, doc.url))
+            lines.append(messages.omitted_entries(omitted, head.url))
         filename = f"{name}-{number}.png"
         embed = Embed(
             description="\n".join(lines),
-            title=doc.title if first else None,
-            url=doc.url if first else None,
+            title=head.title if first else None,
+            url=head.url if first else None,
             footer=(
                 f"{footer} · {messages.page_indicator(number, len(kept))}"
                 if len(kept) > 1

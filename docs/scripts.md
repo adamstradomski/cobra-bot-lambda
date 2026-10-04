@@ -26,7 +26,7 @@ One `KEY=VALUE` per line; blank lines and lines starting with `#` are skipped; `
 
 ## `scripts/capture_snapshots.py` — capture raw Cobra snapshots (T01)
 
-A standalone discovery script that uses only the standard library. It records how Cobra's JSON export looks at different points in a tournament, and how Cobra answers shortcodes, missing tournaments and unpublished tournaments. Its output answers the SPEC open questions in [`findings.md`](findings.md).
+A standalone discovery script that uses only the standard library. It records how Cobra's JSON export looks at different points in a tournament, and how Cobra answers shortcodes, missing tournaments and unpublished tournaments. What it found is summarised in [`spec/cobra.md`](spec/cobra.md), with the evidence in [`archive/findings.md`](archive/findings.md).
 
 It needs Python ≥ 3.14, declared in the script's inline metadata (PEP 723). `uv run` downloads that Python version if needed:
 
@@ -82,7 +82,7 @@ Keep representative snapshots: round start, mid-round, round complete, round 1 w
 
 ## `scripts/anonymize_fixture.py` — anonymise a Cobra export into a test fixture (T04)
 
-Turns a raw export from `snapshots/` into a committable fixture in `tests/fixtures/`, following [SPEC §12](spec.md). Standard library only, Python ≥ 3.14 via `uv run`.
+Turns a raw export from `snapshots/` into a committable fixture in `tests/fixtures/`, following [the fixture rules](spec/fixtures.md). Standard library only, Python ≥ 3.14 via `uv run`.
 
 ```bash
 uv run scripts/anonymize_fixture.py INPUT OUTPUT [--title TEXT] [--date YYYY-MM-DD] [--inject-edge-case-names]
@@ -112,7 +112,7 @@ The commands that regenerate the committed fixtures are kept with the local snap
 
 ## `scripts/register_commands.py` — register the `/cobra` command with Discord (T22)
 
-Overwrites the application's **global** commands with the definition in [`src/cobra_bot/registration.py`](../src/cobra_bot/registration.py) (SPEC §2): `/cobra pairings`, `/cobra standings`, `/cobra top-cut`, `/cobra bracket` and `/cobra player`, installable to servers and to user accounts (`integration_types: [0, 1]`), usable in servers, the bot DM and private channels (`contexts: [0, 1, 2]`). It runs in the project environment, so it uses the project's `httpx` and `cobra_bot`.
+Overwrites the application's **global** commands with the definition in [`src/cobra_bot/registration.py`](../src/cobra_bot/registration.py) ([commands](spec/architecture.md#commands)): `/cobra pairings`, `/cobra standings`, `/cobra top-cut`, `/cobra bracket` and `/cobra player`, installable to servers and to user accounts (`integration_types: [0, 1]`), usable in servers, the bot DM and private channels (`contexts: [0, 1, 2]`). It runs in the project environment, so it uses the project's `httpx` and `cobra_bot`.
 
 ```bash
 uv run scripts/register_commands.py --dry-run

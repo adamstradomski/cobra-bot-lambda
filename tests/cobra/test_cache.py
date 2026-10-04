@@ -83,6 +83,7 @@ def _with_old_entry(minutes: int = 10) -> InMemoryCacheStore:
 # --- AC-16 ------------------------------------------------------------------------
 
 
+@pytest.mark.req("NFR-02", "AC-16")
 def test_ac16_second_request_within_ttl_uses_cache_and_after_ttl_refetches() -> None:
     fetcher = FakeFetcher()
     cache, _, clock = _cache(fetcher)
@@ -108,6 +109,7 @@ def test_fetched_body_is_stored_with_fetch_time() -> None:
 # --- AC-17 ------------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-15", "AC-17")
 def test_ac17_failing_fetch_serves_old_entry_marked_stale() -> None:
     store = _with_old_entry(minutes=10)
     cache, _, _ = _cache(FakeFetcher(error=Unavailable("down")), store)
@@ -119,6 +121,7 @@ def test_ac17_failing_fetch_serves_old_entry_marked_stale() -> None:
     )
 
 
+@pytest.mark.req("FR-15", "AC-17")
 def test_ac17_failing_fetch_without_cache_raises_unavailable() -> None:
     cache, _, _ = _cache(FakeFetcher(error=Unavailable("down")))
 
@@ -126,6 +129,7 @@ def test_ac17_failing_fetch_without_cache_raises_unavailable() -> None:
         cache.tournament(1)
 
 
+@pytest.mark.req("AC-17")
 def test_ac17_not_found_is_raised_and_not_cached() -> None:
     store = _with_old_entry()
     cache, _, _ = _cache(FakeFetcher(error=NotFound("gone")), store)
@@ -140,6 +144,7 @@ def test_ac17_not_found_is_raised_and_not_cached() -> None:
 # --- AC-25 (FR-21) ----------------------------------------------------------------
 
 
+@pytest.mark.req("FR-21", "AC-25")
 def test_ac25_private_tournament_serves_cache_marked_private_and_keeps_entry() -> None:
     store = _with_old_entry(minutes=10)
     before = dict(store.objects)
@@ -151,6 +156,7 @@ def test_ac25_private_tournament_serves_cache_marked_private_and_keeps_entry() -
     assert store.objects == before
 
 
+@pytest.mark.req("FR-21", "AC-25")
 def test_ac25_private_tournament_without_cache_raises_private() -> None:
     cache, _, _ = _cache(FakeFetcher(error=Private("401")))
 
@@ -176,6 +182,7 @@ def test_broken_store_still_serves_from_cobra(caplog: pytest.LogCaptureFixture) 
 # --- shortcodes -------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-12")
 def test_shortcode_is_resolved_and_remembered() -> None:
     cache, store, _ = _cache(FakeFetcher())
 
@@ -258,6 +265,7 @@ def _locked_store(cached_minutes_ago: int | None = 10) -> InMemoryCacheStore:
     return store
 
 
+@pytest.mark.req("NFR-03", "AC-18")
 def test_ac18_waiting_caller_gets_fresh_object_without_http() -> None:
     store = _locked_store()
     fetcher = FakeFetcher()
@@ -320,6 +328,7 @@ def test_lock_is_released_when_the_fetch_fails() -> None:
     assert store.locks == {}
 
 
+@pytest.mark.req("NFR-03")
 def test_abandoned_lock_is_taken_over() -> None:
     store = _locked_store()
     store.locks[lock_key(1)] = T0 - timedelta(seconds=16)
