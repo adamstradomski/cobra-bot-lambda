@@ -211,7 +211,7 @@ def _run(
 
         def draw(table: Table) -> bytes:
             return cached.png(
-                image.table_key(table), lambda: image.render_png(table, fonts)
+                image.table_key(table, fonts), lambda: image.render_png(table, fonts)
             )
 
     match command.name:

@@ -42,7 +42,7 @@ from cobra_bot.formatting.text import (
     standings_url,
 )
 
-# Bump when the drawing changes in a way the cells and style constants in
+# Bump when the drawing changes in a way the cells, style constants and fonts in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
 RENDER_VERSION = 1
 MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 pages
@@ -76,6 +76,7 @@ type Align = Literal["left", "right"]
 class Fonts:
     regular: Font
     bold: Font
+    digest: str  # SHA-256 of the font files, so new fonts draw new cached images
 
 
 @dataclass(frozen=True)
@@ -126,11 +127,12 @@ def render_png(table: Table, fonts: Fonts) -> bytes:
     return out.getvalue()
 
 
-def table_key(table: Table) -> str:
+def table_key(table: Table, fonts: Fonts) -> str:
     """SHA-256 of everything the image of `table` shows: cells, columns, the
-    style constants and `RENDER_VERSION`. Equal keys draw equal PNGs."""
+    style constants, the fonts and `RENDER_VERSION`. Equal keys draw equal PNGs."""
     payload = {
         "version": RENDER_VERSION,
+        "fonts": fonts.digest,
         "style": [
             FONT_SIZE,
             ROW_HEIGHT,

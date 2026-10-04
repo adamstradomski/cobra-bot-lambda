@@ -3,6 +3,7 @@ License 1.1, `OFL.txt`), which cover the Latin Extended letters in player
 names and IDs. Lambda has no system fonts, so they ship in the package.
 """
 
+import hashlib
 from importlib import resources
 
 from PIL import ImageFont
@@ -15,6 +16,9 @@ BOLD = "NotoSans-Bold.ttf"
 
 def load() -> Fonts:
     files = resources.files(__name__)
+    digest = hashlib.sha256()
+    for name in (REGULAR, BOLD):
+        digest.update((files / name).read_bytes())
     with (
         resources.as_file(files / REGULAR) as regular,
         resources.as_file(files / BOLD) as bold,
@@ -22,4 +26,5 @@ def load() -> Fonts:
         return Fonts(
             ImageFont.truetype(str(regular), FONT_SIZE),
             ImageFont.truetype(str(bold), FONT_SIZE),
+            digest.hexdigest(),
         )

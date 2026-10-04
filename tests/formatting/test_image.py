@@ -2,6 +2,7 @@
 
 import io
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 from PIL import Image
@@ -720,9 +721,9 @@ def _table(text: str = "Alice", color: str = c.TEXT, bold: bool = False) -> Tabl
     )
 
 
-def test_table_key_is_stable_for_equal_tables() -> None:
-    assert c.table_key(_table()) == c.table_key(_table())
-    assert len(c.table_key(_table())) == 64
+def test_table_key_is_stable_for_equal_tables(fonts: Fonts) -> None:
+    assert c.table_key(_table(), fonts) == c.table_key(_table(), fonts)
+    assert len(c.table_key(_table(), fonts)) == 64
 
 
 @pytest.mark.parametrize(
@@ -736,24 +737,33 @@ def test_table_key_is_stable_for_equal_tables() -> None:
         Table(_table().columns, (*_table().groups, *_table().groups)),
     ],
 )
-def test_table_key_changes_with_anything_drawn(changed: Table) -> None:
-    assert c.table_key(changed) != c.table_key(_table())
+def test_table_key_changes_with_anything_drawn(changed: Table, fonts: Fonts) -> None:
+    assert c.table_key(changed, fonts) != c.table_key(_table(), fonts)
 
 
 def test_table_key_changes_with_the_render_version(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, fonts: Fonts
 ) -> None:
-    before = c.table_key(_table())
+    before = c.table_key(_table(), fonts)
     monkeypatch.setattr(c, "RENDER_VERSION", c.RENDER_VERSION + 1)
 
-    assert c.table_key(_table()) != before
+    assert c.table_key(_table(), fonts) != before
 
 
-def test_table_key_changes_with_the_colours(monkeypatch: pytest.MonkeyPatch) -> None:
-    before = c.table_key(_table())
+def test_table_key_changes_with_the_colours(
+    monkeypatch: pytest.MonkeyPatch, fonts: Fonts
+) -> None:
+    before = c.table_key(_table(), fonts)
     monkeypatch.setattr(c, "STRIPE", "#000000")
 
-    assert c.table_key(_table()) != before
+    assert c.table_key(_table(), fonts) != before
+
+
+def test_table_key_changes_with_the_fonts(fonts: Fonts) -> None:
+    """New font files draw new images even if `RENDER_VERSION` is not bumped."""
+    other = replace(fonts, digest="0" * 64)
+
+    assert c.table_key(_table(), other) != c.table_key(_table(), fonts)
 
 
 def test_draw_replaces_render_png(fonts: Fonts) -> None:
