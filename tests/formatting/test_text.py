@@ -154,8 +154,9 @@ def test_pad_uses_display_width(text: str, padded: str) -> None:
         ("Haas-Bioroid: Precision Design", "HB PD"),  # by full title
         ("NBN: Reality Plus", "NBN R+"),
         ("NBN: The World is Yours*", "NBN TWIY"),
-        ("NBN:  Reality Plus ", "NBN"),  # not the title as Cobra writes it
-        ("NBN: A Future ID", "NBN"),  # a later ID: the shared prefix
+        ("NBN:  Reality Plus ", "NBN"),  # not as Cobra writes it: fallback
+        ("NBN: A Future ID", "NBN"),  # a later ID: the prefix (fallback)
+        ("Nuvem SA: A Future ID", "Nuvem"),  # a later ID: its prefix's one name
         ("Earth Station: SEA Headquarters", "Earth St."),
         ("The Zwicky Group: Invisible Hands", "Zwicky"),
         ("Jinteki Biotech: Life Imagined", "Biotech"),  # not Jinteki's own IDs
@@ -207,8 +208,8 @@ def test_missing_id_is_logged_once(caplog: pytest.LogCaptureFixture) -> None:
         runner_label("Rielle Peddler: Transhuman")
 
     assert [r.getMessage() for r in caplog.records] == [
-        "corp ID missing from the short-name map: Kestrel Biolabs",
-        "runner ID missing from the short-name map: Rielle Peddler",
+        "corp ID missing from the short-name map: Kestrel Biolabs: Personal Evolution",
+        "runner ID missing from the short-name map: Rielle Peddler: Transhuman",
     ]
 
 
@@ -252,3 +253,14 @@ def test_round_out_of_range_message() -> None:
     assert messages.round_out_of_range(15, 14) == (
         "Round 15 does not exist. This tournament has rounds 1–14."
     )
+
+
+def test_a_later_id_with_a_known_prefix_gets_the_prefix_short_name(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Released after the map was generated: still logged, shown by prefix."""
+    with caplog.at_level(logging.WARNING):
+        label = corp_label("Haas-Bioroid: A Later ID")
+
+    assert label == "HB"
+    assert len(caplog.records) == 1
