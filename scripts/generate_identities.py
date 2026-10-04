@@ -9,7 +9,7 @@ every identity on NetrunnerDB (embed format A-1 to A-3, A-5).
 Each identity's key is its title before the first `:`, written as Cobra writes
 it: straight quotes where NetrunnerDB has curly ones (`René "Loup" Arcemont`).
 Its short name comes from `OVERRIDES` if listed there, otherwise from `derive`.
-Runs in the project environment. See README.md for options and exit codes.
+Runs in the project environment. See docs/scripts.md for options and exit codes.
 """
 
 import argparse

@@ -11,7 +11,7 @@ cache, the parser, the image renderer and formatters, the payload builders), so
 the messages are the production ones: images for pairings and standings, an
 embed for player cards. Cobra is never contacted. Messages are posted through a
 channel webhook (`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the project
-environment. See README.md for options and exit codes.
+environment. See docs/scripts.md for options and exit codes.
 """
 
 import argparse

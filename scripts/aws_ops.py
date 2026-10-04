@@ -8,7 +8,7 @@
 
 Stack name and region come from `samconfig.local.toml`, written by the first
 `sam deploy --guided`. Uses `sam` from PATH, or SAM CLI through `uvx` when it is
-not installed. Standard library only. See README.md for options and exit codes.
+not installed. Standard library only. See docs/scripts.md for options and exit codes.
 """
 
 import argparse
@@ -79,7 +79,7 @@ def deploy_settings(root: Path, config_env: str) -> dict[str, object]:
     if not path.is_file():
         raise UsageError(
             f"{LOCAL_CONFIG} not found. Run `sam deploy --guided` once and save "
-            f"the settings to {LOCAL_CONFIG} (see README.md, Deployment)."
+            f"the settings to {LOCAL_CONFIG} (see README.md, Run your own bot)."
         )
     try:
         config = tomllib.loads(path.read_text(encoding="utf-8"))

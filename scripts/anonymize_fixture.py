@@ -16,7 +16,7 @@
 Only known keys are accepted: an unknown key aborts the run, so a field Cobra
 adds later cannot slip into a committed fixture unreviewed.
 
-Standard library only. See README.md for usage and exit codes.
+Standard library only. See docs/scripts.md for usage and exit codes.
 """
 
 import argparse
