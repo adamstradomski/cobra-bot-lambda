@@ -226,9 +226,12 @@ uv run scripts/generate_identities.py --input cards.json --stdout
 
 **How a short name is chosen:**
 
-- **Key:** the title before the first `:`, as Cobra writes it. NetrunnerDB has curly quotes where Cobra has straight ones (`René “Loup” Arcemont` → `René "Loup" Arcemont`), so curly quotes become straight; text is NFC-normalised.
-- **Override:** if the key is in `OVERRIDES` in the script, that name. It holds the initial mapping (A-3) and IDs whose derived name is too long, ambiguous or not what players call them (`New Angeles Sol` → `NA Sol`, `Near-Earth Hub` → `NEH`, `Virtual Intelligence, P.I.` → `Vic`).
-- **Derived otherwise:** Runner — the nickname in quotes, else the first word (after a leading `The `), comma dropped. Corp — the whole name if it fits in 9 columns, else without a leading `The `, else the first word. Anything still longer than 9 is cut with `…`.
+- **Key:** the full title, as Cobra writes it. NetrunnerDB has curly quotes where Cobra has straight ones (`René “Loup” Arcemont` → `René "Loup" Arcemont`), so curly quotes become straight; text is NFC-normalised. The short name is made from the **prefix**, the title before the first `:`.
+- **Override:** `OVERRIDES` may name a full title (that identity only, e.g. `NBN: Reality Plus` → `NBN R+`) or a prefix (every identity with it, e.g. `Nuvem SA` → `Nuvem`); a full title wins.
+- **Shared prefix:** where several identities on one side share a prefix (Haas-Bioroid, Jinteki, NBN, Weyland Consortium), each gets the prefix's short name and the initials of the rest, small words in lower case (`NBN CtM`), cut to 9, unless it has its own override.
+- **Prefix maps:** the file also holds `CORP_PREFIX_SHORT_NAMES` / `RUNNER_PREFIX_SHORT_NAMES`, prefix → short name; the bot uses them for an identity released after the map was generated (`Haas-Bioroid: …` → `HB`).
+- **What `OVERRIDES` holds:** the initial mapping (A-3) and IDs whose derived name is too long, ambiguous or not what players call them (`New Angeles Sol` → `NA Sol`, `Near-Earth Hub` → `NEH`, `Virtual Intelligence, P.I.` → `Vic`).
+- **Derived otherwise** (from the prefix): Runner — the nickname in quotes, else the first word (after a leading `The `), comma dropped. Corp — the whole name if it fits in 9 columns, else without a leading `The `, else the first word. Anything still longer than 9 is cut with `…`.
 
 It prints a warning (and still writes) for a name it had to cut, two IDs on one side sharing a short name, and an override for an ID NetrunnerDB does not have. Fix them in `OVERRIDES` and run it again. `tests/scripts/test_generate_identities.py` checks that every override is in the committed file.
 

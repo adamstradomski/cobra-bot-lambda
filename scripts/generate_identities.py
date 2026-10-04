@@ -6,9 +6,13 @@ every identity on NetrunnerDB (embed format A-1 to A-3, A-5).
     uv run scripts/generate_identities.py --check
     uv run scripts/generate_identities.py --input cards.json --stdout
 
-Each identity's key is its title before the first `:`, written as Cobra writes
-it: straight quotes where NetrunnerDB has curly ones (`René "Loup" Arcemont`).
-Its short name comes from `OVERRIDES` if listed there, otherwise from `derive`.
+Each identity's key is its full title, written as Cobra writes it: straight
+quotes where NetrunnerDB has curly ones (`René "Loup" Arcemont: Party Animal`).
+Its short name comes from `OVERRIDES` (by full title, else by the title before
+the first `:`, which then covers every identity with that prefix), otherwise it
+is derived from the prefix (`derive`). Where several identities share a prefix
+(`NBN: Making News`, `NBN: Reality Plus`), the prefix's short name gets the
+initials of the rest (`derive_shared`: `NBN MN`), so they can be told apart.
 Runs in the project environment. See docs/scripts.md for options and exit codes.
 """
 
@@ -19,7 +23,7 @@ import sys
 import unicodedata
 import urllib.parse
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, cast
 
@@ -72,11 +76,33 @@ OVERRIDES: dict[Side, dict[str, str]] = {
         "Pravdivost Consulting": "Pravdiv.",
         "Sportsmetal": "Sportsmtl",
         "Thunderbolt Armaments": "Thunderb.",
+        # Several IDs share the text before ":": faction and the ID's initials
+        "Haas-Bioroid: Architects of Tomorrow": "HB AoT",
+        "Haas-Bioroid: Engineering the Future": "HB EtF",
+        "Haas-Bioroid: Precision Design": "HB PD",
+        "Haas-Bioroid: Stronger Together": "HB ST",
+        "Jinteki: Personal Evolution": "Jnt PE",
+        "Jinteki: Potential Unleashed": "Jnt PU",
+        "Jinteki: Replicating Perfection": "Jnt RP",
+        "Jinteki: Restoring Humanity": "Jnt RH",
+        "NBN: Controlling the Message": "NBN CtM",
+        "NBN: Making News": "NBN MN",
+        "NBN: Reality Plus": "NBN R+",
+        "NBN: The World is Yours*": "NBN TWIY",
+        "Weyland Consortium: Because We Built It": "Wey BWBI",
+        "Weyland Consortium: Builder of Nations": "Wey BoN",
+        "Weyland Consortium: Building a Better World": "Wey BaBW",
+        "Weyland Consortium: Built to Last": "Wey BtL",
     },
     "runner": {
         # Not the first word
         "Captain Padma Isbister": "Padma",
         "Virtual Intelligence, P.I.": "Vic",
+        # What players call them, not the derived name
+        "Freedom Khumalo": "Khumalo",
+        'Kate "Mac" McCaffrey': "Kate",
+        'Ken "Express" Tenma': "Ken Tenma",
+        "Laramy Fisk": "Fisk",
         # Longer than 9 columns
         "Silhouette": "Silhouet.",
     },
@@ -101,10 +127,14 @@ class Identity:
 
 @dataclass(frozen=True)
 class Result:
-    corp: dict[str, str]
+    corp: dict[str, str]  # full title -> short name
     runner: dict[str, str]
     skipped: int  # malformed cards
     warnings: tuple[str, ...]
+    # Prefix (the title before ":") -> its short name: the bot's fallback for
+    # an identity released after the map was generated.
+    corp_prefixes: dict[str, str] = field(default_factory=dict)
+    runner_prefixes: dict[str, str] = field(default_factory=dict)
 
 
 # --- reading NetrunnerDB ------------------------------------------------------
@@ -176,10 +206,33 @@ def _identity(card: object) -> Identity | None:
 # --- short names --------------------------------------------------------------
 
 
+def full_title(title: str) -> str:
+    """The whole title, as Cobra writes it."""
+    return unicodedata.normalize("NFC", title).translate(_QUOTES).strip()
+
+
 def key(title: str) -> str:
-    """The title before the first `:`, as Cobra writes it (A-5)."""
-    text = unicodedata.normalize("NFC", title).translate(_QUOTES)
-    return text.split(":", 1)[0].strip()
+    """The title before the first `:`, as Cobra writes it (A-5): the prefix
+    short names are derived from, and overrides may be keyed by."""
+    return full_title(title).split(":", 1)[0].strip()
+
+
+SMALL_WORDS = frozenset({"a", "an", "and", "for", "in", "is", "of", "the", "to"})
+
+
+def derive_shared(prefix_short: str, title: str) -> str:
+    """The short name of an ID that shares its key with others, when there is
+    no override: the key's short name and the initials of the rest, small words
+    in lower case (`NBN: Controlling the Message` -> `NBN CtM`), cut to 9. A
+    title with nothing after its prefix gets the prefix's short name."""
+    words = title.split(":", 1)[1].split() if ":" in title else []
+    initials = "".join(
+        w[0].lower() if n and w.lower() in SMALL_WORDS else w[0].upper()
+        for n, w in enumerate(words)
+        if w[0].isalnum()
+    )
+    short = f"{prefix_short} {initials}".strip()
+    return short if len(short) <= MAX_WIDTH else short[: MAX_WIDTH - 1] + ELLIPSIS
 
 
 def derive(side: Side, name: str) -> str:
@@ -206,14 +259,24 @@ def build(
     skipped: int = 0,
     overrides: Mapping[Side, Mapping[str, str]] = OVERRIDES,
 ) -> Result:
-    names: dict[Side, dict[str, str]] = {"corp": {}, "runner": {}}
+    titles: dict[tuple[Side, str], set[str]] = {}
     for identity in found:
-        name = key(identity.title)
-        override = overrides[identity.side].get(name)
-        names[identity.side][name] = override or derive(identity.side, name)
+        group = titles.setdefault((identity.side, key(identity.title)), set())
+        group.add(full_title(identity.title))
+    names: dict[Side, dict[str, str]] = {"corp": {}, "runner": {}}
+    prefixes: dict[Side, dict[str, str]] = {"corp": {}, "runner": {}}
+    for (side, prefix), group in titles.items():
+        short = overrides[side].get(prefix) or derive(side, prefix)
+        prefixes[side][prefix] = short
+        for title in group:
+            own = overrides[side].get(title)
+            names[side][title] = own or (
+                derive_shared(short, title) if len(group) > 1 else short
+            )
     warnings: list[str] = []
     for side in ("corp", "runner"):
-        for name in sorted(set(overrides[side]) - set(names[side])):
+        known = set(names[side]) | {key(title) for title in names[side]}
+        for name in sorted(set(overrides[side]) - known):
             warnings.append(f"{side} override for an unknown ID: {name}")
         for name, short in names[side].items():
             if short.endswith(ELLIPSIS):
@@ -231,6 +294,8 @@ def build(
         runner=_sorted(names["runner"]),
         skipped=skipped,
         warnings=tuple(warnings),
+        corp_prefixes=_sorted(prefixes["corp"]),
+        runner_prefixes=_sorted(prefixes["runner"]),
     )
 
 
@@ -246,10 +311,11 @@ Generated by `scripts/generate_identities.py` from every identity on NetrunnerDB
 do not edit by hand. To change a short name, edit `OVERRIDES` in the script and
 run it again.
 
-Keys are the text before the first `:` of an identity, as Cobra writes it
-(straight quotes); values are at most 9 columns. IDs missing here (released
-after the last run) fall back to a derived name (`text.corp_label`,
-`text.runner_label`) and are logged.
+`*_SHORT_NAMES` keys are the full identity as Cobra writes it (straight
+quotes); values are at most 9 columns. An ID missing there (released after the
+last run) is logged and falls back to its prefix, the text before the first
+`:`, in `*_PREFIX_SHORT_NAMES`, else to a name derived from the prefix
+(`text.corp_label`, `text.runner_label`).
 """
 '''
 
@@ -259,6 +325,8 @@ def render(result: Result) -> str:
     for constant, names in (
         ("CORP_SHORT_NAMES", result.corp),
         ("RUNNER_SHORT_NAMES", result.runner),
+        ("CORP_PREFIX_SHORT_NAMES", result.corp_prefixes),
+        ("RUNNER_PREFIX_SHORT_NAMES", result.runner_prefixes),
     ):
         lines = [f"    {_literal(k)}: {_literal(v)}," for k, v in names.items()]
         parts.append(

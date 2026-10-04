@@ -238,16 +238,120 @@ def test_override_wins_over_the_derived_name(identities_script: ModuleType) -> N
         found, overrides={"corp": {"Haas-Bioroid": "HB"}, "runner": {}}
     )
 
-    assert result.corp == {"Haas-Bioroid": "HB"}
+    assert result.corp == {"Haas-Bioroid: Engineering the Future": "HB"}
+    assert result.corp_prefixes == {"Haas-Bioroid": "HB"}
     assert result.warnings == ()
 
 
-def test_ids_sharing_a_key_give_one_entry(identities_script: ModuleType) -> None:
-    found = _ids(identities_script, ("corp", "Jinteki: A"), ("corp", "Jinteki: B"))
+def test_keys_are_full_titles_with_cobras_quotes(identities_script: ModuleType) -> None:
+    found = _ids(identities_script, ("runner", "René “Loup” Arcemont: Party Animal"))
 
     result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
 
-    assert result.corp == {"Jinteki": "Jinteki"}
+    assert result.runner == {'René "Loup" Arcemont: Party Animal': "Loup"}
+
+
+def test_ids_sharing_a_prefix_get_its_short_name_and_their_initials(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(
+        identities_script,
+        ("corp", "NBN: Controlling the Message"),
+        ("corp", "NBN: Making News"),
+    )
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.corp == {
+        "NBN: Controlling the Message": "NBN CtM",
+        "NBN: Making News": "NBN MN",
+    }
+
+
+def test_an_id_with_its_own_prefix_gets_the_prefix_short_name(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(identities_script, ("corp", "AU Co.: The Gold Standard in Clones"))
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.corp == {"AU Co.: The Gold Standard in Clones": "AU Co."}
+
+
+def test_the_same_title_twice_is_not_shared(identities_script: ModuleType) -> None:
+    """A reprint: NetrunnerDB lists one identity under two cards."""
+    found = _ids(identities_script, ("corp", "Jinteki: A"), ("corp", "Jinteki: A"))
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.corp == {"Jinteki: A": "Jinteki"}
+
+
+def test_title_without_subtitle_sharing_a_prefix(identities_script: ModuleType) -> None:
+    """`Lat` and `Lat: X` share the prefix `Lat`; the title without `:` gets
+    the prefix's short name (it used to crash the script)."""
+    found = _ids(identities_script, ("runner", "Lat"), ("runner", "Lat: Ethical X"))
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.runner == {"Lat": "Lat", "Lat: Ethical X": "Lat EX"}
+
+
+def test_prefix_override_covers_every_id_with_that_prefix(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(identities_script, ("corp", "Nuvem SA: A"), ("corp", "Nuvem SA: B"))
+
+    result = identities_script.build(
+        found, overrides={"corp": {"Nuvem SA": "Nuvem"}, "runner": {}}
+    )
+
+    assert result.corp == {"Nuvem SA: A": "Nuvem A", "Nuvem SA: B": "Nuvem B"}
+    assert result.warnings == ()
+
+
+def test_full_title_override_wins(identities_script: ModuleType) -> None:
+    found = _ids(
+        identities_script, ("corp", "NBN: Reality Plus"), ("corp", "NBN: Making News")
+    )
+
+    result = identities_script.build(
+        found, overrides={"corp": {"NBN: Reality Plus": "NBN R+"}, "runner": {}}
+    )
+
+    assert result.corp["NBN: Reality Plus"] == "NBN R+"
+
+
+def test_shared_key_with_curly_quotes_uses_cobras_straight_quotes(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(
+        identities_script,
+        ("runner", "X: “One”"),
+        ("runner", "X: Two"),
+    )
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert 'X: "One"' in result.runner
+
+
+@pytest.mark.parametrize(
+    ("prefix", "title", "short"),
+    [
+        ("NBN", "NBN: Controlling the Message", "NBN CtM"),
+        ("NBN", "NBN: The World is Yours*", "NBN TWiY"),
+        ("HB", "Haas-Bioroid: Architects of Tomorrow", "HB AoT"),
+        ("Weyland", "Weyland Consortium: Because We Built It", "Weyland …"),
+        ("NBN", "NBN: 2nd edition", "NBN 2E"),
+        ("NBN", "NBN:", "NBN"),
+    ],
+    ids=["small-word", "first-word-capital", "of", "cut", "digit", "no-subtitle"],
+)
+def test_derive_shared(
+    identities_script: ModuleType, prefix: str, title: str, short: str
+) -> None:
+    assert identities_script.derive_shared(prefix, title) == short
 
 
 def test_entries_sorted_ignoring_case(identities_script: ModuleType) -> None:
@@ -257,7 +361,7 @@ def test_entries_sorted_ignoring_case(identities_script: ModuleType) -> None:
 
     result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
 
-    assert list(result.runner) == ["A", "b", "C"]
+    assert list(result.runner) == ["A: X", "b: X", "C: X"]
 
 
 def test_override_for_an_unknown_id_is_reported(identities_script: ModuleType) -> None:
@@ -276,7 +380,7 @@ def test_cut_name_is_reported(identities_script: ModuleType) -> None:
     )
 
     assert result.warnings == (
-        "runner 'Silhouette' cut to 'Silhouet…'; add an override",
+        "runner 'Silhouette: X' cut to 'Silhouet…'; add an override",
     )
 
 
@@ -286,7 +390,9 @@ def test_shared_short_name_is_reported(identities_script: ModuleType) -> None:
         overrides={"corp": {}, "runner": {}},
     )
 
-    assert result.warnings == ("corp IDs share 'Cyber': Cyber Bureau, Cyber Corp",)
+    assert result.warnings == (
+        "corp IDs share 'Cyber': Cyber Bureau: X, Cyber Corp: Y",
+    )
 
 
 def test_same_short_name_on_both_sides_is_fine(identities_script: ModuleType) -> None:
@@ -319,6 +425,19 @@ def test_rendered_module_round_trips(identities_script: ModuleType) -> None:
 
     assert namespace["CORP_SHORT_NAMES"] == result.corp
     assert namespace["RUNNER_SHORT_NAMES"] == result.runner
+    assert namespace["CORP_PREFIX_SHORT_NAMES"] == {}
+
+
+def test_rendered_module_has_the_prefix_maps(identities_script: ModuleType) -> None:
+    result = identities_script.build(
+        _ids(identities_script, ("corp", "NBN: A"), ("corp", "NBN: B")),
+        overrides={"corp": {}, "runner": {}},
+    )
+
+    namespace = _load(identities_script.render(result))
+
+    assert namespace["CORP_PREFIX_SHORT_NAMES"] == {"NBN": "NBN"}
+    assert namespace["CORP_SHORT_NAMES"] == {"NBN: A": "NBN A", "NBN: B": "NBN B"}
 
 
 @pytest.mark.parametrize(
@@ -355,16 +474,19 @@ def test_rendered_module_ends_with_one_newline_and_uses_lf(
 def test_committed_map_has_every_override(
     identities_script: ModuleType, side: str
 ) -> None:
-    """The overrides live in the script, the map in identities.py: every
-    override must be in the map with its value."""
-    committed = (
-        identities.CORP_SHORT_NAMES if side == "corp" else identities.RUNNER_SHORT_NAMES
+    """The overrides live in the script, the maps in identities.py: a
+    full-title override must be in the full-title map, a prefix override in the
+    prefix map, each with its value."""
+    full, prefixes = (
+        (identities.CORP_SHORT_NAMES, identities.CORP_PREFIX_SHORT_NAMES)
+        if side == "corp"
+        else (identities.RUNNER_SHORT_NAMES, identities.RUNNER_PREFIX_SHORT_NAMES)
     )
 
     missing = {
         name: short
         for name, short in identities_script.OVERRIDES[side].items()
-        if committed.get(name) != short
+        if (full if ":" in name else prefixes).get(name) != short
     }
     assert missing == {}, f"identities.py lacks these {side} overrides; regenerate"
 
@@ -398,8 +520,9 @@ def test_input_file_writes_the_module(
 
     assert code == 0
     namespace = _load(out.read_text(encoding="utf-8"))
-    assert namespace["CORP_SHORT_NAMES"] == {"Nuvem SA": "Nuvem"}
-    assert namespace["RUNNER_SHORT_NAMES"] == {"Lat": "Lat"}
+    assert namespace["CORP_SHORT_NAMES"] == {"Nuvem SA: X": "Nuvem"}
+    assert namespace["RUNNER_SHORT_NAMES"] == {"Lat: Y": "Lat"}
+    assert namespace["CORP_PREFIX_SHORT_NAMES"] == {"Nuvem SA": "Nuvem"}
     assert "1 corp and 1 runner IDs" in capsys.readouterr().err
 
 

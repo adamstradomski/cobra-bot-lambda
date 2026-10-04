@@ -117,7 +117,7 @@ def _id_cell(identity: str, color: str) -> str:
     ("identity", "color", "shown"),
     [
         ("Nuvem SA: Law of the Land", c.CORP, "Nuvem"),
-        ("Haas-Bioroid: Precision Design", c.CORP, "HB"),
+        ("Haas-Bioroid: Precision Design", c.CORP, "HB PD"),
         ("Weyland Consortium: X", c.CORP, "Weyland"),
         ("Magdalene Keino-Chemutai: X", c.RUNNER, "Magdalene"),
         ("Captain Padma Isbister: X", c.RUNNER, "Padma"),  # an override

@@ -9,7 +9,12 @@ from functools import cache
 from typing import Literal
 
 from cobra_bot import messages
-from cobra_bot.formatting.identities import CORP_SHORT_NAMES, RUNNER_SHORT_NAMES
+from cobra_bot.formatting.identities import (
+    CORP_PREFIX_SHORT_NAMES,
+    CORP_SHORT_NAMES,
+    RUNNER_PREFIX_SHORT_NAMES,
+    RUNNER_SHORT_NAMES,
+)
 
 log = logging.getLogger(__name__)
 
@@ -97,30 +102,44 @@ def short_identity(identity: str | None) -> str:
     return identity.split(":", 1)[0].strip() or messages.UNKNOWN_IDENTITY
 
 
+def _full_identity(identity: str) -> str:
+    """The whole ID as the map's full-title keys are written (NFC)."""
+    return unicodedata.normalize("NFC", identity).strip()
+
+
 @cache
 def corp_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Corp ID from the map, else the name before `:`,
-    cut to 9 columns. A missing entry is logged once per ID and process."""
+    """FR-08, A-1–A-2: the short Corp ID from the map (keyed by the whole ID),
+    else its prefix's short name (`Haas-Bioroid` -> `HB`), else the name
+    before `:`, cut to 9 columns. A missing entry is logged once per ID and
+    process."""
     short = short_identity(identity)
-    if short == messages.UNKNOWN_IDENTITY:
+    if short == messages.UNKNOWN_IDENTITY or identity is None:
         return short
-    if short in CORP_SHORT_NAMES:
-        return CORP_SHORT_NAMES[short]
-    log.warning("corp ID missing from the short-name map: %s", short)
+    full = _full_identity(identity)
+    if full in CORP_SHORT_NAMES:
+        return CORP_SHORT_NAMES[full]
+    log.warning("corp ID missing from the short-name map: %s", full)
+    if short in CORP_PREFIX_SHORT_NAMES:
+        return CORP_PREFIX_SHORT_NAMES[short]
     return fit(code_text(short), ID_WIDTH) or messages.UNKNOWN_IDENTITY
 
 
 @cache
 def runner_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Runner ID from the map, else the quoted nickname
-    or the first word, cut to 9 columns. A missing entry is logged once per ID and
-    process."""
+    """FR-08, A-1–A-2: the short Runner ID from the map (keyed by the whole ID),
+    else its prefix's short name, else the quoted
+    nickname or the first word of the name before `:`, cut to 9 columns. A
+    missing entry is logged once per ID and process."""
     short = short_identity(identity)
-    if short == messages.UNKNOWN_IDENTITY:
+    if short == messages.UNKNOWN_IDENTITY or identity is None:
         return short
-    if short in RUNNER_SHORT_NAMES:
-        return RUNNER_SHORT_NAMES[short]
-    log.warning("runner ID missing from the short-name map: %s", short)
+    full = _full_identity(identity)
+    if full in RUNNER_SHORT_NAMES:
+        return RUNNER_SHORT_NAMES[full]
+    log.warning("runner ID missing from the short-name map: %s", full)
+    if short in RUNNER_PREFIX_SHORT_NAMES:
+        return RUNNER_PREFIX_SHORT_NAMES[short]
     safe = code_text(short)
     nickname = _NICKNAME.search(safe)
     if nickname and nickname.group(1).strip():
