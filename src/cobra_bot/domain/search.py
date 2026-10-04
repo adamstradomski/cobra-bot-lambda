@@ -1,4 +1,4 @@
-"""Player name search (SPEC §8)."""
+"""Player name search (docs/spec/domain.md)."""
 
 import unicodedata
 from collections.abc import Iterable

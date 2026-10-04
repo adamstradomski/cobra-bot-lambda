@@ -1,4 +1,4 @@
-"""Standings and pairings as PNG images (SPEC §9), drawn with the bundled fonts."""
+"""Reply tables as PNG images (docs/spec/output.md), drawn with the bundled fonts."""
 
 import io
 from collections.abc import Callable

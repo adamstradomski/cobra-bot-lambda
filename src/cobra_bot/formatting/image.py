@@ -1,5 +1,5 @@
 """Standings, pairings, top cut and players found as a PNG image in an embed
-(SPEC §9).
+(docs/spec/output.md).
 
 Full colours on every client and real columns with headings. The text cannot be
 selected or searched. The embed holds the title link and header lines

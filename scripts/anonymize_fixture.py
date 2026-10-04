@@ -3,7 +3,8 @@
 # requires-python = ">=3.14"
 # dependencies = []
 # ///
-"""Anonymise a raw Cobra tournament export into a test fixture (SPEC §12, task T04).
+"""Anonymise a raw Cobra tournament export into a test fixture
+(docs/spec/fixtures.md).
 
 - Player names become deterministic pseudonyms (`Player0001`…), in `players` and
   `eliminationPlayers`.
@@ -31,8 +32,9 @@ DEFAULT_TITLE = "Fixture Tournament"
 DEFAULT_DATE = "2000-01-01"
 FAKE_ORGANISER = {"nrdbId": 1, "nrdbUsername": "fixture-organiser"}
 FAKE_UPLOADED_FROM = "https://tournaments.nullsignal.games/tournaments/FXTR"
-# Edge-case names (SPEC §12): assigned to the lowest-ranked players, in this order
-# starting from the last rank, so acceptance criteria about top players are unaffected.
+# Edge-case names (docs/spec/fixtures.md): assigned to the lowest-ranked players,
+# in this order starting from the last rank, so acceptance criteria about top
+# players are unaffected.
 EDGE_CASE_NAMES = ("@Mention", "*bold_name~", "Maëlig", "Żółw")
 
 TOP_KEYS = frozenset(
@@ -251,7 +253,7 @@ def iso_date(value: str) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Anonymise a raw Cobra export into a test fixture (SPEC §12).",
+        description="Anonymise a raw Cobra export into a test fixture.",
     )
     parser.add_argument("input", type=Path, help="raw Cobra export (JSON)")
     parser.add_argument("output", type=Path, help="anonymised fixture to write")

@@ -1,5 +1,5 @@
 """Discord interaction webhooks: edit the deferred response, post follow-ups
-(SPEC §3, §9; NFR-06, NFR-10).
+(docs/spec/architecture.md, output.md; NFR-06, NFR-10).
 
 - Every payload sets `allowed_mentions: {"parse": []}` so nothing pings.
 - Only HTTP 429 is retried, after `Retry-After` (Discord did not process the
@@ -99,7 +99,7 @@ def image_files(pages: Sequence[ImagePage]) -> tuple[Attachment, ...]:
 
 def text_payload(text: str) -> Payload:
     """A single-embed reply, e.g. an error message: one sentence in the bot
-    colour (SPEC §9)."""
+    colour (docs/spec/output.md)."""
     return message_payload([Embed(description=text, color=EMBED_COLOR)])
 
 

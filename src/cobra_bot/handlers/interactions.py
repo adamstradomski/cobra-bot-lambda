@@ -1,4 +1,5 @@
-"""InteractionsFunction: Lambda Function URL entry point (SPEC §1, §3; NFR-04, NFR-07).
+"""InteractionsFunction: Lambda Function URL entry point (docs/spec/architecture.md;
+NFR-04, NFR-07).
 
 Verify the signature, answer PING, acknowledge commands with a deferred response
 (public for every command) and hand the work to the Worker asynchronously.

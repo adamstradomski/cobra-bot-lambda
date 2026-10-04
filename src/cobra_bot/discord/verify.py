@@ -1,4 +1,5 @@
-"""Ed25519 verification of Discord interaction requests (NFR-07, SPEC §10).
+"""Ed25519 verification of Discord interaction requests (NFR-07;
+docs/spec/architecture.md).
 
 Discord signs `timestamp + body` with the application's key and sends the
 signature in `X-Signature-Ed25519` and the timestamp in `X-Signature-Timestamp`.

@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "docs" / "requirements.md"
-ACCEPTANCE = ROOT / "docs" / "spec.md"
+ACCEPTANCE = ROOT / "docs" / "spec" / "acceptance-criteria.md"
 TESTS = ROOT / "tests"
 
 ID = re.compile(r"(?:FR|NFR|AC)-[0-9]{2}")

@@ -1,4 +1,5 @@
-"""WorkerFunction: runs a deferred command and sends the reply (SPEC §1, §3).
+"""WorkerFunction: runs a deferred command and sends the reply
+(docs/spec/architecture.md).
 
 Invoked asynchronously by InteractionsFunction with no retries (NFR-06), so it
 never raises: every failure ends in a logged error and, where possible, an error

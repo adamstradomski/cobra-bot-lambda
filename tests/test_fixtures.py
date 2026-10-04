@@ -1,6 +1,7 @@
 """Guards for committed fixtures: every file in tests/fixtures/ must look anonymised
-(SPEC §12, NFR-11). The originals are not in the repository, so this checks the
-shape anonymize_fixture.py produces rather than comparing against raw data."""
+(docs/spec/fixtures.md, NFR-11). The originals are not in the repository, so
+this checks the shape anonymize_fixture.py produces rather than comparing
+against raw data."""
 
 import json
 import re

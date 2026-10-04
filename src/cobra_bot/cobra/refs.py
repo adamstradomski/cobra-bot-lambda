@@ -1,10 +1,10 @@
-"""Parse the `tournament` command option into a Cobra reference (SPEC §6).
+"""Parse the `tournament` command option into a Cobra reference (docs/spec/cobra.md).
 
 Accepted:
 - a numeric ID: `4909`;
 - a Cobra URL with an ID: `https://tournaments.nullsignal.games/tournaments/4977/...`;
 - a shortcode, bare or as a Cobra URL: `QNSF`, `https://tournaments.nullsignal.games/QNSF`
-  (docs/findings.md Q4: 4 letters or digits, case-insensitive; an all-digit
+  (docs/spec/cobra.md: 4 letters or digits, case-insensitive; an all-digit
   input is always an ID).
 Surrounding whitespace and Discord's `<...>` link-suppression brackets are ignored.
 """

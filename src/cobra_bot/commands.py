@@ -1,5 +1,5 @@
 """The `/cobra` command: read it from an interaction, hand it to the Worker, and
-run it there (SPEC §2, §3).
+run it there (docs/spec/architecture.md).
 
 The Worker receives only what it needs (`Job`), never the whole interaction,
 so no user data travels or gets logged (NFR-09).
@@ -140,7 +140,7 @@ def _command(
 
 @dataclass(frozen=True)
 class Images:
-    """A reply as image pages: pairings, standings, top cut, bracket (SPEC §9)."""
+    """A reply as image pages: pairings, standings, top cut, bracket, players."""
 
     pages: tuple[ImagePage, ...]
 

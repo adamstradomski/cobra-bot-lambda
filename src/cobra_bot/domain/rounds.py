@@ -1,4 +1,4 @@
-"""Round-state derivation (SPEC §5, adjusted by docs/findings.md).
+"""Round-state derivation (docs/spec/domain.md).
 
 Round numbers are 1-based positions in `Tournament.rounds`; Swiss rounds come
 first and elimination (top cut) rounds follow them in the same list.
@@ -48,7 +48,7 @@ def is_swiss(rnd: Round) -> bool:
 
 
 def is_pairing_complete(pairing: Pairing) -> bool:
-    """Unreported results are null (findings Q1); a bye needs no result."""
+    """Unreported results are null (docs/spec/cobra.md); a bye needs no result."""
     if pairing.is_bye:
         return True
     seats = (pairing.seat1, pairing.seat2)
@@ -89,7 +89,7 @@ def counted_round(t: Tournament) -> int | None:
     """The Swiss round Cobra's `matchPoints` add up to; None if none fits.
 
     Cobra recounts them when the organiser closes a round, not when its last
-    result comes in (docs/findings.md Q2), so a complete round may not be
+    result comes in (docs/spec/cobra.md), so a complete round may not be
     counted yet. The answer is the last complete round N, or an earlier one,
     for which every player's `matchPoints` is the sum of their `combinedScore`
     over Swiss rounds 1..N (byes included).

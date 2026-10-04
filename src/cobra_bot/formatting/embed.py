@@ -1,4 +1,5 @@
-"""Discord embeds of a reply: an image page or a one-sentence reply (SPEC §9)."""
+"""Discord embeds of a reply: an image page or an embed without an image
+(docs/spec/output.md)."""
 
 from dataclasses import dataclass, field
 

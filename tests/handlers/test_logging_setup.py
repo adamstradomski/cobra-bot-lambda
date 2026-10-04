@@ -31,7 +31,7 @@ def test_info_is_dropped_by_default(caplog: pytest.LogCaptureFixture) -> None:
 def test_app_loggers_pass_info_after_configuring(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """SPEC §10 logs command, tournament and duration at INFO."""
+    """docs/spec/architecture.md logs command, tournament and duration at INFO."""
     configure_logging()
 
     assert _info_reaches_handlers(caplog)

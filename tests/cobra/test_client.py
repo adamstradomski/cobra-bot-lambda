@@ -71,7 +71,7 @@ def test_connection_error_is_unavailable() -> None:
         _client(refused).fetch_tournament(1)
 
 
-# --- Cobra specifics (findings Q5) ----------------------------------------------------
+# --- Cobra specifics (docs/spec/cobra.md) ---------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -104,7 +104,7 @@ def test_unexpected_responses_are_unavailable(response: httpx.Response) -> None:
         _client(lambda _: response).fetch_tournament(1)
 
 
-# --- shortcodes (findings Q4) ---------------------------------------------------------
+# --- shortcodes (docs/spec/cobra.md) ------------------------------------------------
 
 
 @pytest.mark.req("FR-12")

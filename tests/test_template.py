@@ -1,5 +1,5 @@
-"""template.yaml (SPEC §11): the settings that protect users and the bill, and
-consistency with the code it deploys."""
+"""template.yaml (docs/spec/architecture.md): the settings that protect users and
+the bill, and consistency with the code it deploys."""
 
 import importlib
 import tomllib
@@ -55,7 +55,7 @@ def test_ac23_cache_bucket_expires_objects(template: Template) -> None:
     assert {"Status": "Enabled", "ExpirationInDays": 1}.items() <= rules[0].items()
 
 
-# --- other SPEC §11 settings ----------------------------------------------------------
+# --- other settings (docs/spec/architecture.md) -------------------------------------
 
 
 @pytest.mark.req("NFR-06")
@@ -133,7 +133,7 @@ def test_budget_alerts_go_to_the_email_parameter(template: Template) -> None:
         ]
 
 
-# --- least privilege (SPEC §10) -------------------------------------------------------
+# --- least privilege (docs/spec/architecture.md) --------------------------------------
 
 
 def test_interactions_may_only_invoke_the_worker(template: Template) -> None:

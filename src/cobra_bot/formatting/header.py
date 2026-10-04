@@ -1,4 +1,4 @@
-"""The text around a reply's image (SPEC §9): the embed title and its Cobra
+"""The text around a reply's image (docs/spec/output.md): the embed title and its Cobra
 link, the header lines above the image and the notes below it."""
 
 from dataclasses import dataclass
@@ -25,7 +25,8 @@ class Header:
 
 
 def data_line(t: Tournament, *, private: bool = False) -> str:
-    """When the data was fetched, and why it is stale if it is (SPEC §7, FR-21).
+    """When the data was fetched, and why it is stale if it is (FR-21;
+    docs/spec/cache.md).
 
     Lives in the description, not the embed footer: footers do not render
     Discord timestamps.

@@ -1,4 +1,4 @@
-"""`CacheStore` on Amazon S3 (SPEC §7).
+"""`CacheStore` on Amazon S3 (docs/spec/cache.md).
 
 Each object holds the raw body; its `fetched-at` metadata is the fetch time as
 UTC epoch seconds. The boto3 client is injected (provided by the Lambda runtime;
@@ -75,8 +75,8 @@ class S3CacheStore:
         )
 
     def acquire_lock(self, key: str, now: datetime, abandoned_after: timedelta) -> bool:
-        """SPEC §7: create with If-None-Match: *; take over an abandoned lock with
-        If-Match on its ETag. The lock body is the UTC epoch second it was taken."""
+        """Create with If-None-Match: *; take over an abandoned lock with If-Match
+        on its ETag. The lock body is the UTC epoch second it was taken."""
         body = _epoch(now).encode()
         try:
             self._client.put_object(

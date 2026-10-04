@@ -171,7 +171,7 @@ def test_last_complete_round_is_used_when_a_later_round_is_partial() -> None:
     assert view.after_round == 1
 
 
-# --- standings round: what Cobra has counted (findings Q2) -------------------------
+# --- standings round: what Cobra has counted (docs/spec/domain.md) --------------------
 
 
 def _with_points(*points: int) -> tuple[Player, ...]:

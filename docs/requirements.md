@@ -1,6 +1,6 @@
 # Requirements — Cobra Discord Bot
 
-Status: Draft v0.4 · 2026-10-04
+What the bot must do. How it does it: `docs/spec/`. Why: `docs/decisions.md`.
 
 ## 1. Purpose
 
@@ -30,24 +30,24 @@ The bot is public. It can be added to any Discord server (server install) and by
 | ID | Priority | Requirement | Status |
 |----|----------|-------------|--------|
 | FR-01 | Must | Slash command `/cobra pairings <tournament> [round]` posts pairings publicly in the channel. | Implemented |
-| FR-02 | Must | Without `round`, pairings are shown for the latest round, Swiss or top cut (changed 2026-10-04: the latest round always). With `round`, for that round; rounds are numbered by their position in Cobra's export, Swiss rounds first, then the top-cut rounds. A top-cut round is headed "Top cut round N pairings" and shows game numbers and the winner (`W`/`L`) instead of tables and points. | Implemented |
+| FR-02 | Must | Without `round`, pairings are shown for the latest round, Swiss or top cut. With `round`, for that round; rounds are numbered by their position in Cobra's export, Swiss rounds first, then the top-cut rounds. A top-cut round is headed "Top cut round N pairings" and shows game numbers and the winner (`W`/`L`) instead of tables and points. | Implemented |
 | FR-03 | Must | Pairings output states which round it shows and whether that round is in progress or complete. | Implemented |
 | FR-04 | Must | Each pairing shows: table number, both player names, roles and identities (IDs), and results if reported. Byes and intentional draws are shown explicitly. | Implemented |
 | FR-05 | Must | Both single-sided Swiss (one game per round) and double-sided Swiss (two games per round) are supported. | Implemented |
 | FR-06 | Must | Slash command `/cobra standings <tournament>` posts the Swiss standings publicly, stating after which round they apply. If no round is complete yet, it says "No completed rounds yet" and lists the players in the order Cobra gives them (`rank`). Once Swiss is over (every Swiss round so far complete and counted, or a cut made), a note gives the top cut's state: none on Cobra yet, announced but not started, in progress, or finished (FR-22). | Implemented |
 | FR-07 | Must | Each standings row shows: rank, player name, match points, Strength of Schedule (SoS), Corp ID and Runner ID. | Implemented |
-| FR-08 | Must | IDs are displayed in short form: every ID is mapped by its full name to a short name of at most 9 columns, made from the text before the first `:` (e.g. "Nuvem SA: Law of the Land" → "Nuvem"). Where several IDs share that text (Haas-Bioroid, Jinteki, NBN, Weyland Consortium), each ID has its own short name: the faction and the ID's initials (e.g. "Haas-Bioroid: Precision Design" → "HB PD", "NBN: Reality Plus" → "NBN R+"; changed 2026-10-04). There is a fallback for IDs missing from the map (the short name of the text before `:`, e.g. "HB") (SPEC §9; `docs/embeded_format.md` A-1–A-4). The images use the same short names. | Implemented |
-| FR-09 | Must | Slash command `/cobra player <tournament> <query>` replies publicly (changed from ephemeral on 2026-10-03, so a group can follow its players together). `query` may list up to 10 names separated by commas, e.g. `Alice, Bob, Carol`; each is searched on its own and every matching player gets a card, once, in rank order. Matching is a substring match that ignores letter case and diacritics (e.g. `maelig` matches "Maëlig", `zolw` matches "Żółw"). | Implemented |
+| FR-08 | Must | IDs are displayed in short form: every ID is mapped by its full name to a short name of at most 9 columns, made from the text before the first `:` (e.g. "Nuvem SA: Law of the Land" → "Nuvem"). Where several IDs share that text (Haas-Bioroid, Jinteki, NBN, Weyland Consortium), each ID has its own short name: the faction and the ID's initials (e.g. "Haas-Bioroid: Precision Design" → "HB PD", "NBN: Reality Plus" → "NBN R+"). There is a fallback for IDs missing from the map (the short name of the text before `:`, e.g. "HB") (`docs/spec/output.md` A-1–A-5). The images use the same short names. | Implemented |
+| FR-09 | Must | Slash command `/cobra player <tournament> <query>` replies publicly. `query` may list up to 10 names separated by commas, e.g. `Alice, Bob, Carol`; each is searched on its own and every matching player gets a row, once, in rank order. Matching is a substring match that ignores letter case and diacritics (e.g. `maelig` matches "Maëlig", `zolw` matches "Żółw"). | Implemented |
 | FR-10 | Must | Player search returns up to 3 matches, ordered by rank; if more exist, it says how many more matched. Each match shows rank, points, SoS, IDs and the player's pairing in the latest round, Swiss or top cut (table or game, opponent, role, result) or bye. | Implemented |
 | FR-11 | Must | `<tournament>` accepts a numeric ID or a Cobra URL (any page under `/tournaments/{id}/…`). | Implemented |
-| FR-12 | Should | `<tournament>` also accepts a shortcode (e.g. `HBYM`), if Cobra offers a reliable way to resolve it (see T01). | Implemented |
-| FR-13 | Must | If the tournament has not started (no rounds), the bot says so; standings instead list the registered players, if there are any, as Cobra does (SPEC AC-26). | Implemented |
-| FR-14 | Must | Output uses Discord embeds; standings, pairings and player search show their table as an image in the embed (decided 2026-10-03, SPEC §9). Long output is split across up to 5 messages (images: up to 5 pages, all in one message); if it does not fit, the last message (page) says how many entries were omitted and links to the full page on Cobra. | Implemented |
+| FR-12 | Should | `<tournament>` also accepts a shortcode (e.g. `HBYM`), resolved through Cobra. | Implemented |
+| FR-13 | Must | If the tournament has not started (no rounds), the bot says so; standings instead list the registered players, if there are any, as Cobra does (AC-26). | Implemented |
+| FR-14 | Must | Output uses Discord embeds; standings, pairings, the top cut, the bracket and player search show their table as an image in the embed. Long output is split into up to 5 pages, all in one message; if it does not fit, the last page says how many entries were omitted and links to the full page on Cobra. | Implemented |
 | FR-15 | Must | If Cobra is unavailable, the bot shows the last cached data with a note stating when it was fetched. If no cached data exists, it shows an error. | Implemented |
 | FR-16 | Must | Clear user-facing errors for: invalid tournament reference, tournament not found, tournament private (without cache), round out of range, Cobra unavailable without cache. | Implemented |
 | FR-17 | Must | All bot responses are in English. | Manual |
 | FR-18 | Must | Commands work in servers where the bot is installed, and — for users who installed the bot on their account — in any server, DM or group DM. | Implemented |
-| FR-19 | Must | Top cut (elimination) pairings (FR-02), bracket (FR-24) and ranking (FR-23). Added 2026-10-04, replacing the MVP reply "Top cut is not supported yet". | Implemented |
+| FR-19 | Must | Top cut (elimination) pairings (FR-02), bracket (FR-24) and ranking (FR-23). | Implemented |
 | FR-20 | Could | Extended SoS (eSoS) column in standings. | Not implemented |
 | FR-22 | Must | The top cut's state is derived from Cobra's export: none (`cutToTop` 0, no elimination round), announced (`cutToTop` set, no elimination round), in progress (an elimination round), finished (Cobra has placed a player first in `eliminationPlayers`). | Implemented |
 | FR-23 | Must | Slash command `/cobra top-cut <tournament>` posts the top-cut ranking publicly, like standings: place (blank while Cobra has not decided it), player, Corp and Runner ID, games won and lost in the cut, seed. Players still in the cut come first, by seed, then those out but not placed, the later out higher; players out are shown secondary. Without a cut: "This tournament has no top cut on Cobra yet." | Implemented |
@@ -67,7 +67,7 @@ The bot is public. It can be added to any Discord server (server install) and by
 | NFR-07 | Must | Discord request signatures (Ed25519) are verified; invalid requests are rejected with HTTP 401. | Implemented |
 | NFR-08 | Must | The bot token is used only by the local command registration script, from environment variables; it is never stored in AWS, the repository or logs. Deployed configuration (Discord public key, resource names) comes from template parameters as environment variables; nothing account- or bot-specific is hard-coded, so several bots or AWS accounts can run the same code. | Implemented |
 | NFR-09 | Must | No persistent storage of user data. Only a cache of public tournament data, expiring automatically. | Implemented |
-| NFR-10 | Must | Bot messages never trigger mentions (`allowed_mentions` empty); player names cannot inject markup: they are shown inside code blocks they cannot close, and user text outside code blocks is escaped for Discord markdown. | Implemented |
+| NFR-10 | Must | Bot messages never trigger mentions (`allowed_mentions` empty); player names cannot inject markup: they are drawn in images, and user text in messages (the search query) is escaped for Discord markdown. | Implemented |
 | NFR-11 | Must | Test fixtures derived from real tournaments are anonymised before being committed. | Implemented |
 | NFR-12 | Must | Logs go to CloudWatch with 14-day retention; full Cobra payloads are not logged. | Partly |
 | NFR-13 | Must | AWS budget alarm at USD 5/month. | Implemented |
@@ -92,7 +92,18 @@ The bot is public. It can be added to any Discord server (server install) and by
 - Public HTTP API for other bots.
 - Text/prefix commands (e.g. `!pairings`) and a Gateway (WebSocket) connection.
 
-## 8. Open items (TBD)
+## 8. Risks
+
+| Risk | Mitigation |
+|------|-----------|
+| Cobra's JSON is not an official API and may change | Tolerant parser; fixture tests; contact NSG. |
+| NSG does not agree to the bot | Show the MVP early; the shared cache and User-Agent keep the load low. |
+| Thundering herd on cache expiry | Single-flight lock (NFR-03). |
+| Discord rate limits | One message per reply; `Retry-After` honoured. |
+| User install exposes the bot to many contexts | Shared cache; budget alarm; rate limiting if needed. |
+| Cold starts | Small InteractionsFunction without Pillow; deferred ack within 3 s. |
+
+## 9. Open items (TBD)
 
 - Response-time target, expected load.
 - NSG consent — to be requested after showing the MVP.

@@ -28,7 +28,7 @@ def round_out_of_range(requested: int, last_round: int) -> str:
     )
 
 
-# --- headers and notes (SPEC §9) -------------------------------------------------
+# --- headers and notes (docs/spec/output.md) ------------------------------------------
 
 NO_COMPLETED_ROUNDS = "No completed rounds yet"
 REGISTERED_PLAYERS = "Registered players — not started yet"
@@ -225,7 +225,7 @@ def compact_players_footer(round_number: int | None, players: int) -> str:
     return " · ".join([*parts, _count(players, "player")])
 
 
-# --- command registration (SPEC §2) --------------------------------------------
+# --- command registration (docs/spec/architecture.md) ---------------------------------
 
 COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
 PAIRINGS_DESCRIPTION = "Show pairings for a round, Swiss or top cut"
