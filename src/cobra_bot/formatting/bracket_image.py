@@ -308,10 +308,11 @@ def _text(
         )
 
 
-def bracket_key(layout: Layout) -> str:
-    """SHA-256 of everything the image shows, for the image cache."""
+def bracket_key(layout: Layout, fonts: Fonts) -> str:
+    """SHA-256 of everything the image shows, fonts included, for the image cache."""
     payload = {
         "version": RENDER_VERSION,
+        "fonts": fonts.digest,
         "kind": "bracket",
         "columns": layout.columns,
         "sections": [
@@ -357,7 +358,7 @@ def bracket_images(
     def draw() -> bytes:
         return render_png(layout, fonts)
 
-    body = png(bracket_key(layout), draw) if png else draw()
+    body = png(bracket_key(layout, fonts), draw) if png else draw()
     games = sum(len(s.boxes) for s in layout.sections)
     embed = Embed(
         description="\n".join(

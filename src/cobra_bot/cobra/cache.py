@@ -1,6 +1,6 @@
 """Shared tournament cache over a `CacheStore` (SPEC §7, NFR-02, FR-15, FR-21).
 
-- Fresh entry (age ≤ TTL): served without contacting Cobra.
+- Fresh entry (age ≤ `TTL`, 60 s): served without contacting Cobra.
 - Expired or missing: fetch from Cobra, store, serve.
 - Cobra unavailable or the tournament now private: serve the cached copy marked
   stale (any age), else re-raise. The cache entry is never overwritten then.

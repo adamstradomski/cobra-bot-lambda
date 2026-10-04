@@ -51,8 +51,8 @@ filterwarnings = ["error"]
 
 [dependency-groups]
 dev = [
-    "boto3>=1.43.107",
-    "mypy>=2.3.1",
+    "boto3>=1.43.108",
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pyyaml>=6.0.3",
     "ruff>=0.16.10",

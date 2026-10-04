@@ -2,6 +2,7 @@
 
 import io
 from collections.abc import Callable
+from dataclasses import replace
 
 from PIL import Image
 
@@ -203,13 +204,21 @@ def test_render_draws_a_png_wide_enough_for_every_column(
     assert height > sum(s.height for s in layout.sections)
 
 
-def test_key_is_stable_and_follows_what_is_shown() -> None:
+def test_key_is_stable_and_follows_what_is_shown(fonts: Fonts) -> None:
     before = _layout(_top4((_game(1, 1, 4), _game(2, 2, 3))))
     same = _layout(_top4((_game(1, 1, 4), _game(2, 2, 3))))
     reported = _layout(_top4((_game(1, 1, 4, 1), _game(2, 2, 3))))
 
-    assert bi.bracket_key(before) == bi.bracket_key(same)
-    assert bi.bracket_key(before) != bi.bracket_key(reported)
+    assert bi.bracket_key(before, fonts) == bi.bracket_key(same, fonts)
+    assert bi.bracket_key(before, fonts) != bi.bracket_key(reported, fonts)
+
+
+def test_key_changes_with_the_fonts(fonts: Fonts) -> None:
+    layout = _layout(_top4())
+
+    assert bi.bracket_key(layout, replace(fonts, digest="0" * 64)) != bi.bracket_key(
+        layout, fonts
+    )
 
 
 # --- message --------------------------------------------------------------------------
@@ -243,4 +252,4 @@ def test_bracket_message_uses_the_image_cache(fonts: Fonts) -> None:
     (page,) = bi.bracket_images(t, _view(t), fonts, png=cached)
 
     assert page.png == b"cached"
-    assert keys == [bi.bracket_key(_layout(t))]
+    assert keys == [bi.bracket_key(_layout(t), fonts)]

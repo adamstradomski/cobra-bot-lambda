@@ -78,14 +78,21 @@ def last_complete_swiss_round(t: Tournament) -> int:
 
 
 def standings_round(t: Tournament) -> int:
-    """The Swiss round Cobra's `rank` and `matchPoints` stand after.
+    """The Swiss round Cobra's `rank` and `matchPoints` stand after:
+    `counted_round`, or the last complete Swiss round if no round fits (e.g.
+    points adjusted by hand in Cobra)."""
+    counted = counted_round(t)
+    return last_complete_swiss_round(t) if counted is None else counted
+
+
+def counted_round(t: Tournament) -> int | None:
+    """The Swiss round Cobra's `matchPoints` add up to; None if none fits.
 
     Cobra recounts them when the organiser closes a round, not when its last
     result comes in (docs/findings.md Q2), so a complete round may not be
     counted yet. The answer is the last complete round N, or an earlier one,
     for which every player's `matchPoints` is the sum of their `combinedScore`
-    over Swiss rounds 1..N (byes included). If no round fits (e.g. points
-    adjusted by hand in Cobra), the last complete round is used as before.
+    over Swiss rounds 1..N (byes included).
     """
     last = last_complete_swiss_round(t)
     swiss = [t.rounds[n - 1] for n in swiss_round_numbers(t)]
@@ -98,7 +105,7 @@ def standings_round(t: Tournament) -> int:
                     points[seat.player_id] += seat.combined_score or 0
         totals.append(dict(points))
     counted = {p.id: p.match_points for p in t.players}
-    return next((n for n in range(last, -1, -1) if totals[n] == counted), last)
+    return next((n for n in range(last, -1, -1) if totals[n] == counted), None)
 
 
 def pairings_view(t: Tournament, requested: int | None = None) -> PairingsResult:

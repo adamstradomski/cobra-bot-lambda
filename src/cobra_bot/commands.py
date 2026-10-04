@@ -30,6 +30,7 @@ from cobra_bot.domain.rounds import (
     PairingsView,
     RoundOutOfRange,
     StandingsView,
+    counted_round,
     pairings_view,
     ranked_players,
     standings_view,
@@ -210,7 +211,7 @@ def _run(
 
         def draw(table: Table) -> bytes:
             return cached.png(
-                image.table_key(table), lambda: image.render_png(table, fonts)
+                image.table_key(table, fonts), lambda: image.render_png(table, fonts)
             )
 
     match command.name:
@@ -231,6 +232,13 @@ def _run(
                 case NotStarted():
                     return messages.NOT_STARTED
                 case StandingsView() as standings:
+                    if counted_round(t) is None:
+                        log.warning(
+                            "tournament %s: match points fit no Swiss round; "
+                            "standings shown after round %d",
+                            t.id,
+                            standings.after_round,
+                        )
                     return Images(
                         image.standings_images(
                             t, standings, fonts, private=private, draw=draw

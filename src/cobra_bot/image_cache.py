@@ -5,7 +5,7 @@ part of a reply, and when the data has not changed the images would be drawn
 the same again, so they are kept for 10 minutes on their own:
 
 - Key: `images/{sha256}.png`, the hash of exactly what the image shows
-  (`formatting.image.table_key`: cells, colours, layout, renderer version).
+  (`formatting.image.table_key`: cells, colours, layout, fonts, renderer version).
   Changed data draws a new image; unchanged data reuses it, however often the
   Cobra cache refreshes. The embed text around it (header, `Data from …`) is
   built fresh for every reply.
