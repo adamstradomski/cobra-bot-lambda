@@ -151,10 +151,14 @@ def test_pad_uses_display_width(text: str, padded: str) -> None:
     ("identity", "label"),
     [
         ("Nuvem SA: Law of the Land", "Nuvem"),
-        ("Haas-Bioroid: Precision Design", "HB"),
+        ("Haas-Bioroid: Precision Design", "HB PD"),  # by full title
+        ("NBN: Reality Plus", "NBN R+"),
+        ("NBN: The World is Yours*", "NBN TWIY"),
+        ("NBN:  Reality Plus ", "NBN"),  # not the title as Cobra writes it
+        ("NBN: A Future ID", "NBN"),  # a later ID: the shared prefix
         ("Earth Station: SEA Headquarters", "Earth St."),
         ("The Zwicky Group: Invisible Hands", "Zwicky"),
-        ("Jinteki: Personal Evolution", "Jinteki"),  # fallback: the full name
+        ("Jinteki Biotech: Life Imagined", "Biotech"),  # not Jinteki's own IDs
         ("Quantumflux Armaments: Peace", "Quantumf…"),  # cut to 9 columns
         (None, messages.UNKNOWN_IDENTITY),  # A-4
         ("", messages.UNKNOWN_IDENTITY),

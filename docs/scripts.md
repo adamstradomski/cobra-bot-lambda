@@ -227,6 +227,7 @@ uv run scripts/generate_identities.py --input cards.json --stdout
 **How a short name is chosen:**
 
 - **Key:** the title before the first `:`, as Cobra writes it. NetrunnerDB has curly quotes where Cobra has straight ones (`René “Loup” Arcemont` → `René "Loup" Arcemont`), so curly quotes become straight; text is NFC-normalised.
+- **Shared keys:** where several identities on one side share the key (Haas-Bioroid, Jinteki, NBN, Weyland Consortium), each also gets an entry under its full title (`NBN: Making News`), which the bot looks up first. Its short name is the override for the full title if there is one (`NBN R+`), else the key's short name and the initials of the rest, small words in lower case (`NBN CtM`), cut to 9. The key's own entry stays, for an identity released later.
 - **Override:** if the key is in `OVERRIDES` in the script, that name. It holds the initial mapping (A-3) and IDs whose derived name is too long, ambiguous or not what players call them (`New Angeles Sol` → `NA Sol`, `Near-Earth Hub` → `NEH`, `Virtual Intelligence, P.I.` → `Vic`).
 - **Derived otherwise:** Runner — the nickname in quotes, else the first word (after a leading `The `), comma dropped. Corp — the whole name if it fits in 9 columns, else without a leading `The `, else the first word. Anything still longer than 9 is cut with `…`.
 

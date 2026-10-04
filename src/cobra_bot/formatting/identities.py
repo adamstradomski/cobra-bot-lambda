@@ -5,9 +5,10 @@ do not edit by hand. To change a short name, edit `OVERRIDES` in the script and
 run it again.
 
 Keys are the text before the first `:` of an identity, as Cobra writes it
-(straight quotes); values are at most 9 columns. IDs missing here (released
-after the last run) fall back to a derived name (`text.corp_label`,
-`text.runner_label`) and are logged.
+(straight quotes); where several identities share that text, each also has an
+entry under its full title, looked up first. Values are at most 9 columns. IDs
+missing here (released after the last run) fall back to a derived name
+(`text.corp_label`, `text.runner_label`) and are logged.
 """
 
 CORP_SHORT_NAMES: dict[str, str] = {
@@ -35,6 +36,10 @@ CORP_SHORT_NAMES: dict[str, str] = {
     "GRNDL": "GRNDL",
     "Haarpsichord Studios": "Haarp.",
     "Haas-Bioroid": "HB",
+    "Haas-Bioroid: Architects of Tomorrow": "HB AoT",
+    "Haas-Bioroid: Engineering the Future": "HB EtF",
+    "Haas-Bioroid: Precision Design": "HB PD",
+    "Haas-Bioroid: Stronger Together": "HB ST",
     "Harishchandra Ent.": "Harish.",
     "Harmony Medtech": "Harmony",
     "Hyoubu Institute": "Hyoubu",
@@ -44,11 +49,19 @@ CORP_SHORT_NAMES: dict[str, str] = {
     "Jemison Astronautics": "Jemison",
     "Jinteki": "Jinteki",
     "Jinteki Biotech": "Biotech",
+    "Jinteki: Personal Evolution": "Jnt PE",
+    "Jinteki: Potential Unleashed": "Jnt PU",
+    "Jinteki: Replicating Perfection": "Jnt RP",
+    "Jinteki: Restoring Humanity": "Jnt RH",
     "LEO Construction": "LEO",
     "MirrorMorph": "MirrMorph",
     "Mti Mwekundu": "Mti",
     "Méliès U": "Méliès",
     "NBN": "NBN",
+    "NBN: Controlling the Message": "NBN CtM",
+    "NBN: Making News": "NBN MN",
+    "NBN: Reality Plus": "NBN R+",
+    "NBN: The World is Yours*": "NBN TWIY",
     "Near-Earth Hub": "NEH",
     "Nebula Talent Management": "Nebula",
     "New Angeles Sol": "NA Sol",
@@ -80,6 +93,10 @@ CORP_SHORT_NAMES: dict[str, str] = {
     "Thunderbolt Armaments": "Thunderb.",
     "Titan Transnational": "Titan",
     "Weyland Consortium": "Weyland",
+    "Weyland Consortium: Because We Built It": "Wey BWBI",
+    "Weyland Consortium: Builder of Nations": "Wey BoN",
+    "Weyland Consortium: Building a Better World": "Wey BaBW",
+    "Weyland Consortium: Built to Last": "Wey BtL",
 }
 
 RUNNER_SHORT_NAMES: dict[str, str] = {
@@ -102,7 +119,7 @@ RUNNER_SHORT_NAMES: dict[str, str] = {
     'Ele "Smoke" Scovak': "Smoke",
     "Esâ Afontov": "Esâ",
     "Exile": "Exile",
-    "Freedom Khumalo": "Freedom",
+    "Freedom Khumalo": "Khumalo",
     "Gabriel Santiago": "Gabriel",
     "Hayley Kaplan": "Hayley",
     'Hiram "0mission" Svensson': "0mission",

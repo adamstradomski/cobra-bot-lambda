@@ -242,12 +242,85 @@ def test_override_wins_over_the_derived_name(identities_script: ModuleType) -> N
     assert result.warnings == ()
 
 
-def test_ids_sharing_a_key_give_one_entry(identities_script: ModuleType) -> None:
-    found = _ids(identities_script, ("corp", "Jinteki: A"), ("corp", "Jinteki: B"))
+def test_ids_sharing_a_key_get_full_title_entries_and_keep_the_key(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(
+        identities_script,
+        ("corp", "NBN: Controlling the Message"),
+        ("corp", "NBN: Making News"),
+    )
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.corp == {
+        "NBN": "NBN",
+        "NBN: Controlling the Message": "NBN CtM",
+        "NBN: Making News": "NBN MN",
+    }
+
+
+def test_an_id_with_its_own_key_gets_no_full_title_entry(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(identities_script, ("corp", "AU Co.: The Gold Standard in Clones"))
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert result.corp == {"AU Co.": "AU Co."}
+
+
+def test_the_same_title_twice_is_not_shared(identities_script: ModuleType) -> None:
+    """A reprint: NetrunnerDB lists one identity under two cards."""
+    found = _ids(identities_script, ("corp", "Jinteki: A"), ("corp", "Jinteki: A"))
 
     result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
 
     assert result.corp == {"Jinteki": "Jinteki"}
+
+
+def test_full_title_override_wins(identities_script: ModuleType) -> None:
+    found = _ids(
+        identities_script, ("corp", "NBN: Reality Plus"), ("corp", "NBN: Making News")
+    )
+
+    result = identities_script.build(
+        found, overrides={"corp": {"NBN: Reality Plus": "NBN R+"}, "runner": {}}
+    )
+
+    assert result.corp["NBN: Reality Plus"] == "NBN R+"
+
+
+def test_shared_key_with_curly_quotes_uses_cobras_straight_quotes(
+    identities_script: ModuleType,
+) -> None:
+    found = _ids(
+        identities_script,
+        ("runner", "X: “One”"),
+        ("runner", "X: Two"),
+    )
+
+    result = identities_script.build(found, overrides={"corp": {}, "runner": {}})
+
+    assert 'X: "One"' in result.runner
+
+
+@pytest.mark.parametrize(
+    ("prefix", "title", "short"),
+    [
+        ("NBN", "NBN: Controlling the Message", "NBN CtM"),
+        ("NBN", "NBN: The World is Yours*", "NBN TWiY"),
+        ("HB", "Haas-Bioroid: Architects of Tomorrow", "HB AoT"),
+        ("Weyland", "Weyland Consortium: Because We Built It", "Weyland …"),
+        ("NBN", "NBN: 2nd edition", "NBN 2E"),
+        ("NBN", "NBN:", "NBN"),
+    ],
+    ids=["small-word", "first-word-capital", "of", "cut", "digit", "no-subtitle"],
+)
+def test_derive_shared(
+    identities_script: ModuleType, prefix: str, title: str, short: str
+) -> None:
+    assert identities_script.derive_shared(prefix, title) == short
 
 
 def test_entries_sorted_ignoring_case(identities_script: ModuleType) -> None:

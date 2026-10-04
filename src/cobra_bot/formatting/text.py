@@ -97,13 +97,22 @@ def short_identity(identity: str | None) -> str:
     return identity.split(":", 1)[0].strip() or messages.UNKNOWN_IDENTITY
 
 
+def _full_identity(identity: str) -> str:
+    """The whole ID as the map's full-title keys are written (NFC)."""
+    return unicodedata.normalize("NFC", identity).strip()
+
+
 @cache
 def corp_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Corp ID from the map, else the name before `:`,
+    """FR-08, A-1–A-2: the short Corp ID from the map (by full title for IDs
+    sharing the text before `:`, else by that text), else the name before `:`,
     cut to 9 columns. A missing entry is logged once per ID and process."""
     short = short_identity(identity)
-    if short == messages.UNKNOWN_IDENTITY:
+    if short == messages.UNKNOWN_IDENTITY or identity is None:
         return short
+    full = _full_identity(identity)
+    if full in CORP_SHORT_NAMES:
+        return CORP_SHORT_NAMES[full]
     if short in CORP_SHORT_NAMES:
         return CORP_SHORT_NAMES[short]
     log.warning("corp ID missing from the short-name map: %s", short)
@@ -112,12 +121,16 @@ def corp_label(identity: str | None) -> str:
 
 @cache
 def runner_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Runner ID from the map, else the quoted nickname
+    """FR-08, A-1–A-2: the short Runner ID from the map (by full title first, as
+    for Corps), else the quoted nickname
     or the first word, cut to 9 columns. A missing entry is logged once per ID and
     process."""
     short = short_identity(identity)
-    if short == messages.UNKNOWN_IDENTITY:
+    if short == messages.UNKNOWN_IDENTITY or identity is None:
         return short
+    full = _full_identity(identity)
+    if full in RUNNER_SHORT_NAMES:
+        return RUNNER_SHORT_NAMES[full]
     if short in RUNNER_SHORT_NAMES:
         return RUNNER_SHORT_NAMES[short]
     log.warning("runner ID missing from the short-name map: %s", short)

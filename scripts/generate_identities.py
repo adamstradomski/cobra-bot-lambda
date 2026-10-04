@@ -8,7 +8,11 @@ every identity on NetrunnerDB (embed format A-1 to A-3, A-5).
 
 Each identity's key is its title before the first `:`, written as Cobra writes
 it: straight quotes where NetrunnerDB has curly ones (`René "Loup" Arcemont`).
-Its short name comes from `OVERRIDES` if listed there, otherwise from `derive`.
+Where several identities share that key (`NBN: Making News`, `NBN: Reality
+Plus`), each also gets an entry under its full title, so they can be told apart
+(`NBN MN`, `NBN R+`); the key alone stays as the fallback for a later one.
+A short name comes from `OVERRIDES` if listed there, otherwise from `derive`
+(`derive_shared` for a full title).
 Runs in the project environment. See docs/scripts.md for options and exit codes.
 """
 
@@ -72,12 +76,30 @@ OVERRIDES: dict[Side, dict[str, str]] = {
         "Pravdivost Consulting": "Pravdiv.",
         "Sportsmetal": "Sportsmtl",
         "Thunderbolt Armaments": "Thunderb.",
+        # Several IDs share the text before ":": faction and the ID's initials
+        "Haas-Bioroid: Architects of Tomorrow": "HB AoT",
+        "Haas-Bioroid: Engineering the Future": "HB EtF",
+        "Haas-Bioroid: Precision Design": "HB PD",
+        "Haas-Bioroid: Stronger Together": "HB ST",
+        "Jinteki: Personal Evolution": "Jnt PE",
+        "Jinteki: Potential Unleashed": "Jnt PU",
+        "Jinteki: Replicating Perfection": "Jnt RP",
+        "Jinteki: Restoring Humanity": "Jnt RH",
+        "NBN: Controlling the Message": "NBN CtM",
+        "NBN: Making News": "NBN MN",
+        "NBN: Reality Plus": "NBN R+",
+        "NBN: The World is Yours*": "NBN TWIY",
+        "Weyland Consortium: Because We Built It": "Wey BWBI",
+        "Weyland Consortium: Builder of Nations": "Wey BoN",
+        "Weyland Consortium: Building a Better World": "Wey BaBW",
+        "Weyland Consortium: Built to Last": "Wey BtL",
     },
     "runner": {
         # Not the first word
         "Captain Padma Isbister": "Padma",
         "Virtual Intelligence, P.I.": "Vic",
         # What players call them, not the derived name
+        "Freedom Khumalo": "Khumalo",
         'Kate "Mac" McCaffrey': "Kate",
         'Ken "Express" Tenma': "Ken Tenma",
         "Laramy Fisk": "Fisk",
@@ -180,10 +202,31 @@ def _identity(card: object) -> Identity | None:
 # --- short names --------------------------------------------------------------
 
 
+def full_title(title: str) -> str:
+    """The whole title, as Cobra writes it."""
+    return unicodedata.normalize("NFC", title).translate(_QUOTES).strip()
+
+
 def key(title: str) -> str:
     """The title before the first `:`, as Cobra writes it (A-5)."""
-    text = unicodedata.normalize("NFC", title).translate(_QUOTES)
-    return text.split(":", 1)[0].strip()
+    return full_title(title).split(":", 1)[0].strip()
+
+
+SMALL_WORDS = frozenset({"a", "an", "and", "for", "in", "is", "of", "the", "to"})
+
+
+def derive_shared(prefix_short: str, title: str) -> str:
+    """The short name of an ID that shares its key with others, when there is
+    no override: the key's short name and the initials of the rest, small words
+    in lower case (`NBN: Controlling the Message` -> `NBN CtM`), cut to 9."""
+    words = title.split(":", 1)[1].split()
+    initials = "".join(
+        w[0].lower() if n and w.lower() in SMALL_WORDS else w[0].upper()
+        for n, w in enumerate(words)
+        if w[0].isalnum()
+    )
+    short = f"{prefix_short} {initials}".strip()
+    return short if len(short) <= MAX_WIDTH else short[: MAX_WIDTH - 1] + ELLIPSIS
 
 
 def derive(side: Side, name: str) -> str:
@@ -210,11 +253,20 @@ def build(
     skipped: int = 0,
     overrides: Mapping[Side, Mapping[str, str]] = OVERRIDES,
 ) -> Result:
-    names: dict[Side, dict[str, str]] = {"corp": {}, "runner": {}}
+    found = list(found)
+    titles: dict[tuple[Side, str], set[str]] = {}
     for identity in found:
-        name = key(identity.title)
-        override = overrides[identity.side].get(name)
-        names[identity.side][name] = override or derive(identity.side, name)
+        group = titles.setdefault((identity.side, key(identity.title)), set())
+        group.add(full_title(identity.title))
+    names: dict[Side, dict[str, str]] = {"corp": {}, "runner": {}}
+    for (side, name), group in titles.items():
+        short = overrides[side].get(name) or derive(side, name)
+        names[side][name] = short
+        if len(group) > 1:
+            for title in group:
+                names[side][title] = overrides[side].get(title) or derive_shared(
+                    short, title
+                )
     warnings: list[str] = []
     for side in ("corp", "runner"):
         for name in sorted(set(overrides[side]) - set(names[side])):
@@ -251,9 +303,10 @@ do not edit by hand. To change a short name, edit `OVERRIDES` in the script and
 run it again.
 
 Keys are the text before the first `:` of an identity, as Cobra writes it
-(straight quotes); values are at most 9 columns. IDs missing here (released
-after the last run) fall back to a derived name (`text.corp_label`,
-`text.runner_label`) and are logged.
+(straight quotes); where several identities share that text, each also has an
+entry under its full title, looked up first. Values are at most 9 columns. IDs
+missing here (released after the last run) fall back to a derived name
+(`text.corp_label`, `text.runner_label`) and are logged.
 """
 '''
 
