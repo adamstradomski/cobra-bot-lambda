@@ -1,6 +1,6 @@
 # Findings — Cobra JSON discovery (T01)
 
-Status: in progress (top cut still to capture) · last updated 2026-10-03 (16:00Z)
+Status: complete except a few edge cases (see Still to capture) · last updated 2026-10-04 (19:10Z)
 
 This file records what the live Cobra exports actually look like. Per `CLAUDE.md`, it overrides assumptions marked TBD in `docs/spec.md`. The raw evidence lives in `snapshots/`, which is git-ignored and not anonymised. File names are given so the evidence can be re-checked locally.
 
@@ -14,6 +14,7 @@ This file records what the live Cobra exports actually look like. Per `CLAUDE.md
 | Shortcode probes | `/QNSF`, `/qnsf`, `/ZQXJ` | `snapshots/probes/20261001T1615*_{QNSF,qnsf,ZQXJ}.meta.json` |
 | Non-existent ID probes | `/tournaments/99999999.json`, `/tournaments/99999999` | `snapshots/probes/20261001T174701Z_tournaments_99999999*.meta.json` |
 | Tournament 5132 | World Championship 2026, live single-sided Swiss, day 1: 262 players registered before round 1, 283 once round 1 was paired, `preliminaryRounds: 3`, `cutToTop: 0` (the cut is played on day 2). Polled every 2 min from 13:17Z to 15:55Z (64 changed exports, 9 kept, listed under each finding). | `snapshots/5132/20261003T123215Z.json` (before round 1), `…T131725Z` (round 1 paired, no results), `…T134544Z` (round 1, 66/138 tables), `…T140144Z` (round 1 complete and counted), `…T140344Z` (round 2 paired), `…T143944Z` (round 2, 61/141), `…T145545Z` (round 2, 140/141), `…T145945Z` (round 3 paired, round 2 counted), `…T153345Z` (round 3, 50/141), `…T155545Z` (round 3 complete, not counted) |
+| Tournament 5132, day 2 | World Championship 2026, Swiss rounds 12–14 and the top 16 (double elimination). Polled every 2 min from 09:57Z to 18:57Z (61 changed responses, 13 kept). 531 KB at the end of polling. | `snapshots/5132/20261004T095727Z.json` (day 2 start, 11 rounds), `…T144325Z` (round 13, 32/35 tables), `…T144725Z` (round 14 paired), `…T152925Z` (round 14, 20/33), `…T154325Z` and `…T154525Z` (`.meta.json` + `.body.txt`, private: 401), `…T154725Z` (public again, round 14 complete), `…T165125Z` (cut announced, not paired), `…T165325Z` (cut round 1 paired), `…T175125Z` (cut round 1, 4/8 games), `…T180325Z` (cut round 2 paired), `…T185527Z` (cut round 2, 5/8), `…T185727Z` (cut round 3 paired, places 13–16 decided) |
 | Private tournament probes | `/tournaments/5125.json`, `/tournaments/5125` while private (18:11Z) and after being made public (18:26Z) | `snapshots/probes/20261001T181141Z_tournaments_5125*.meta.json`, `snapshots/probes/20261001T182654Z_tournaments_5125*.meta.json`, `snapshots/5125/20261001T182654Z.json` |
 
 ## Open questions (SPEC §15)
@@ -76,6 +77,7 @@ This file records what the live Cobra exports actually look like. Per `CLAUDE.md
 - **The shortcode of a private tournament hides the ID.** `/N9WI` returns `302` with `Location: https://tournaments.nullsignal.games/` (the home page). This is a third outcome, distinct from `/tournaments/{id}` (known code) and `/tournaments/not_found?code=…` (unknown code). A shortcode given while the tournament is private cannot be resolved to an ID, and so cannot reach the cached copy, unless the code → ID mapping was cached while the tournament was public.
 - **Why organisers hide a tournament** (author, 2026-10-01): briefly, e.g. to announce pairings or results live so players are not on their phones, or to protect Cobra from overload. The tournament becomes visible again afterwards. The cache only holds data fetched before the tournament was hidden, so serving it does not leak what is announced while it is private.
 - **Organisers can toggle visibility mid-event.** FR-21, SPEC §7 and AC-25 cover a public tournament turning private: serve the cached copy with a "now private" note.
+- **Seen live at World Championship 2026:** 5132 answered `401` with the same body at 15:43Z and 15:45Z on day 2 (`…T154325Z`, `…T154525Z`), between a public export at 15:41Z and the next one at 15:47Z, while round 14 was being reported. So a private spell can last only minutes.
 - **Empty tournament export:** 5125 has `players: []`, `rounds: []`, `preliminaryRounds: 0`, `cutToTop: 0` (424 B). This is a real "not started" export, usable for AC-06 instead of a synthetic one. Snapshot: `snapshots/5125/20261001T182654Z.json`.
 
 **A non-existent ID does not return 404.**
@@ -100,11 +102,22 @@ User-facing handling of 401 is decided in FR-21, SPEC §7 and AC-25: serve the c
 - **HTTP:**
   - The JSON is served without gzip: 19 KB for 31 players and 3 rounds; 123 KB for World Championship 2026 in round 1 and 197 KB after 3 rounds (283 players), fetched in 0.6–1.8 s during play.
   - `Cache-Control: max-age=0, private, must-revalidate`.
+- **Swiss with part of the field:** on day 2 of World Championship 2026 only the leading players kept playing Swiss. Rounds 12–14 have 36, 35 and 33 tables, while `players` still lists all 284 players with their ranks. `preliminaryRounds` grew with each round (11 at the start of day 2, 14 before the cut). Nothing marks who stopped: they are simply not paired. Round state, standings (`matchPoints` still fit round 14 for every player) and the bot's replies are unaffected.
   - The weak `ETag` equals the first 32 hex characters of the body's SHA-256, so it is a pure function of the body. `If-None-Match` revalidation (304) might lower the cost of refreshing the cache. Untested.
 
 ## Top cut — from Cobra's source code (2026-10-04)
 
-Read from Null-Signal-Games/cobra (`app/services/nrtm_json.rb`, `app/services/bracket/*.rb`) before a live cut could be captured. Still to confirm against live snapshots.
+Read from Null-Signal-Games/cobra (`app/services/nrtm_json.rb`, `app/services/bracket/*.rb`) before a live cut could be captured. **Confirmed live** on the top 16 of World Championship 2026 (5132, 2026-10-04), up to round 3 of the cut:
+
+- `cutToTop: 16` and 16 `eliminationPlayers` places, all with `id`, `name` and `seed` `null`, appear when the cut is announced (`…T165125Z`), before any cut game is paired; the first cut round follows 2 min later (`…T165325Z`).
+- Unreported games have `winner: null` on both seats; reported ones `true` / `false`.
+- Tables are game numbers: 1–8, 9–16, then 17–22 in round 3. Game 1 is seed 1 against seed 16, in that seat order, and every seed equals the player's Swiss `rank`.
+- Places 13–16 were filled together once round 2 (games 9–16) was fully reported (`…T185727Z`); 1st to 12th were still `null`.
+- Swiss `rank` and `matchPoints` stay as after the last Swiss round during the cut.
+- Every command (`pairings`, `standings`, `player`, `top-cut`, `bracket`) answers on each kept snapshot, the bracket is recognised as double elimination, and `scripts/anonymize_fixture.py` accepts the live cut export.
+
+From the source code:
+
 
 - **`winner` while unreported:** `null` (`score > opp_score if score && opp_score`); `true` / `false` once both scores are in.
 - **`eliminationPlayers` during the cut:** one entry per place (`rank` 1..N); a place not decided yet has `id`, `name` and `seed` `null`. Cobra fills a group of places together (e.g. 13th–16th once games 9–12 are all reported); 1st and 2nd come with the final. The anonymiser keeps these nulls.
@@ -116,7 +129,8 @@ Read from Null-Signal-Games/cobra (`app/services/nrtm_json.rb`, `app/services/br
 
 ## Still to capture
 
-- [ ] Live top cut (World Championship 2026, day 2): cut start, an elimination round in progress. Run `uv run scripts/capture_snapshots.py <id> --interval 120`, using 5132 or the ID of a separate cut tournament if the organisers create one.
+- [ ] Finished World Championship 2026 with the whole top 16, once after the final (only one fetch is needed; finished exports stay on Cobra): `uv run scripts/capture_snapshots.py 5132 --once`. It would confirm the final places and whether a second final was played.
+- [x] Live top cut (World Championship 2026, 5132): cut announced, rounds 1–2 in progress and complete, round 3 paired.
 - [ ] 5018 with round 3 partly reported. No longer needed for AC-07: 5132 `…T153345Z` (single-sided, 50/141 tables) covers a partly reported round. It would still show a double-sided pair with only one game in (Q3): `uv run scripts/capture_snapshots.py 5018 --interval 1800`
 - [x] Live single-sided Swiss (World Championship 2026, 5132): round 1 with no results, round start, mid-round, round complete before and after the recount.
 - [x] Finished exports 4909 and 4990 (fixtures for the ACs).
