@@ -4,6 +4,7 @@ import io
 from collections.abc import Callable
 from dataclasses import replace
 
+import pytest
 from PIL import Image
 
 from builders import FETCHED_AT, pairing, player, seat, tournament
@@ -13,6 +14,9 @@ from cobra_bot.domain.models import EliminationPlayer, Pairing, Round, Tournamen
 from cobra_bot.formatting import bracket_image as bi
 from cobra_bot.formatting import image
 from cobra_bot.formatting.image import Fonts
+
+pytestmark = pytest.mark.req("FR-24")
+
 
 type LoadRaw = Callable[[str], object]
 
@@ -121,6 +125,7 @@ def _slot_texts(layout: bi.Layout, game: int) -> list[tuple[str, str]]:
     return [(n.text, i.text) for n, i in _boxes(layout)[game].slots]
 
 
+@pytest.mark.req("AC-30")
 def test_unknown_slots_say_where_the_player_comes_from() -> None:
     layout = _layout(_top4())
 
@@ -224,6 +229,7 @@ def test_key_changes_with_the_fonts(fonts: Fonts) -> None:
 # --- message --------------------------------------------------------------------------
 
 
+@pytest.mark.req("AC-30")
 def test_bracket_message(fonts: Fonts) -> None:
     t = _top4((_game(1, 1, 4), _game(2, 2, 3)))
 

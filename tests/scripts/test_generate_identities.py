@@ -251,6 +251,7 @@ def test_keys_are_full_titles_with_cobras_quotes(identities_script: ModuleType) 
     assert result.runner == {'René "Loup" Arcemont: Party Animal': "Loup"}
 
 
+@pytest.mark.req("FR-08")
 def test_ids_sharing_a_prefix_get_its_short_name_and_their_initials(
     identities_script: ModuleType,
 ) -> None:

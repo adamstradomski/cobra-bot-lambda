@@ -222,6 +222,7 @@ def test_execution_role_covers_every_app_resource_type(bootstrap: Document) -> N
 # --- the workflow --------------------------------------------------------------------
 
 
+@pytest.mark.req("NFR-14")
 def test_deploy_runs_after_ci_on_main(workflow: Document) -> None:
     ci = _load(".github/workflows/ci.yml")
 
@@ -262,6 +263,7 @@ def test_workflow_deploys_the_stack_the_roles_allow(
     assert workflow["env"]["STACK_NAME"] == _default(bootstrap, "AppStackName")
 
 
+@pytest.mark.req("NFR-14")
 def test_workflow_deploys_to_the_configured_region(workflow: Document) -> None:
     samconfig = tomllib.loads((ROOT / "samconfig.toml").read_text(encoding="utf-8"))
     region = samconfig["default"]["global"]["parameters"]["region"]
@@ -292,3 +294,13 @@ def test_deploy_never_waits_for_a_change_set_prompt(workflow: Document) -> None:
 
     assert "--no-confirm-changeset" in deploy["run"]
     assert "--no-fail-on-empty-changeset" in deploy["run"]
+
+
+@pytest.mark.req("NFR-15")
+def test_ci_runs_every_check_on_push_and_pull_request() -> None:
+    ci = _load(".github/workflows/ci.yml")
+    runs = [step.get("run", "") for step in ci["jobs"]["check"]["steps"]]
+
+    assert set(_triggers(ci)) == {"push", "pull_request"}
+    for check in ("ruff check", "ruff format --check", "mypy src", "pytest"):
+        assert any(check in run for run in runs), check

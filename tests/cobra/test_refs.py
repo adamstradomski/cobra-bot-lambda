@@ -13,6 +13,7 @@ STANDINGS_URL = (
 )
 
 
+@pytest.mark.req("FR-11", "AC-13")
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
@@ -24,6 +25,7 @@ def test_ac13_valid_references(text: str, expected: TournamentRef) -> None:
     assert parse_ref(text) == expected
 
 
+@pytest.mark.req("FR-11", "AC-13")
 @pytest.mark.parametrize("text", ["https://example.com/tournaments/1", "abc!"])
 def test_ac13_invalid_references(text: str) -> None:
     with pytest.raises(InvalidTournamentRef):

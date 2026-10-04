@@ -87,6 +87,7 @@ def _json(response: dict[str, object]) -> object:
 # --- AC-19 ---------------------------------------------------------------------------
 
 
+@pytest.mark.req("NFR-07", "AC-19")
 def test_ac19_invalid_signature_is_401() -> None:
     app, fake = _app()
     event = _event({"type": 1})
@@ -98,12 +99,14 @@ def test_ac19_invalid_signature_is_401() -> None:
     assert fake.calls == []
 
 
+@pytest.mark.req("NFR-07", "AC-19")
 def test_ac19_missing_signature_is_401() -> None:
     app, _ = _app()
 
     assert app.handle(_event({"type": 1}, sign=False))["statusCode"] == 401
 
 
+@pytest.mark.req("AC-19")
 def test_ac19_ping_is_pong() -> None:
     app, _ = _app()
 
@@ -113,6 +116,7 @@ def test_ac19_ping_is_pong() -> None:
     assert _json(response) == {"type": 1}
 
 
+@pytest.mark.req("FR-09", "NFR-04", "AC-19")
 def test_ac19_player_is_deferred_publicly_and_worker_invoked_async() -> None:
     app, fake = _app()
 
@@ -129,6 +133,7 @@ def test_ac19_player_is_deferred_publicly_and_worker_invoked_async() -> None:
 # --- other commands and cases -----
 
 
+@pytest.mark.req("FR-01")
 @pytest.mark.parametrize(
     ("sub", "options", "command"),
     [
@@ -158,6 +163,7 @@ def test_base64_body_is_decoded() -> None:
     assert _json(app.handle(_event({"type": 1}, base64_body=True))) == {"type": 1}
 
 
+@pytest.mark.req("NFR-09")
 def test_worker_payload_carries_no_user_data() -> None:
     app, fake = _app()
     interaction = _command("standings", tournament="4909")

@@ -29,6 +29,7 @@ def _player(pid: int, name: str, rank: int) -> Player:
     return Player(pid, name, rank, 0, Decimal(0), Decimal(0), None, None, None, None)
 
 
+@pytest.mark.req("FR-09", "AC-09")
 def test_ac09_substring_in_different_case_finds_one_player(
     raw_fixture: LoadRaw,
 ) -> None:
@@ -39,6 +40,7 @@ def test_ac09_substring_in_different_case_finds_one_player(
     assert result.more == 0
 
 
+@pytest.mark.req("FR-10", "AC-10")
 def test_ac10_more_than_three_matches(raw_fixture: LoadRaw) -> None:
     players = _players(raw_fixture, "single_sided_top8")
     pseudonymous = sorted(
@@ -51,12 +53,14 @@ def test_ac10_more_than_three_matches(raw_fixture: LoadRaw) -> None:
     assert result.more == len(pseudonymous) - 3
 
 
+@pytest.mark.req("AC-11")
 def test_ac11_no_match(raw_fixture: LoadRaw) -> None:
     result = search_players(_players(raw_fixture, "single_sided_top8"), "nobody")
 
     assert result == SearchResult(matches=(), more=0)
 
 
+@pytest.mark.req("FR-09", "AC-12")
 @pytest.mark.parametrize(("query", "name"), [("maelig", "Maëlig"), ("ZOLW", "Żółw")])
 def test_ac12_diacritics_are_ignored(
     raw_fixture: LoadRaw, query: str, name: str
@@ -84,6 +88,7 @@ def test_normalize(text: str, expected: str) -> None:
     assert normalize(text) == expected
 
 
+@pytest.mark.req("FR-10")
 def test_matches_are_ordered_by_rank_and_limited() -> None:
     players = [
         _player(i, f"Anna {i}", rank) for i, rank in [(1, 5), (2, 1), (3, 3), (4, 2)]
@@ -130,6 +135,7 @@ def _roster() -> list[Player]:
     ]
 
 
+@pytest.mark.req("FR-09", "AC-27")
 def test_several_names_union_in_rank_order_once_each() -> None:
     """AC-27: a player matched by two names gets one card, in rank order."""
     result = search_names(_roster(), "bob, ali, alice")
@@ -160,6 +166,7 @@ def test_name_without_a_match_is_reported_not_dropped() -> None:
     assert [(n.name, n.found) for n in result.names] == [("bob", 1), ("zed", 0)]
 
 
+@pytest.mark.req("AC-27")
 @pytest.mark.parametrize(("given", "skipped"), [(9, 0), (10, 0), (11, 1), (13, 3)])
 def test_at_most_ten_names_are_searched(given: int, skipped: int) -> None:
     """AC-27: names past the tenth are counted, not searched."""

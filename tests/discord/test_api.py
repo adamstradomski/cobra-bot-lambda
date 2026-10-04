@@ -44,6 +44,7 @@ class Recorder:
 # --- AC-21 ---------------------------------------------------------------------------
 
 
+@pytest.mark.req("NFR-10", "AC-21")
 def test_ac21_every_reply_blocks_mentions() -> None:
     """Text, embed and image replies all set `allowed_mentions: {"parse": []}`,
     so a name such as `@Mention` in a header never pings anyone."""
@@ -307,6 +308,7 @@ def test_image_payload_ten_pages_is_the_limit() -> None:
     assert len(image_payload([_page(n) for n in range(10)])["embeds"]) == 10  # type: ignore[arg-type]
 
 
+@pytest.mark.req("FR-14")
 def test_image_pages_go_in_one_message_in_place_of_the_deferral() -> None:
     """One upload instead of one per page: a long reply is that much faster."""
     recorder = Recorder()

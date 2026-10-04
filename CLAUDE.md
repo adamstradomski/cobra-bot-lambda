@@ -52,7 +52,7 @@ Before finishing any task, run pytest, ruff check, ruff format --check and mypy 
 - I/O dependencies (HTTP client, clock, cache store, boto3 clients) are injected so they can be faked.
 - Unit tests never touch the network or real AWS; use fixtures, mocked HTTP, the in-memory `CacheStore`, and botocore `Stubber`.
 - Fixtures from real tournaments are committed only after anonymisation (`scripts/anonymize_fixture.py`). Tests refer to players by Cobra player ID, not by name.
-- Every acceptance criterion (`AC-xx` in `docs/spec.md`) has at least one test; reference the AC ID in the test name or docstring.
+- Every requirement and acceptance criterion has a test marked `@pytest.mark.req("FR-xx", "AC-xx")`; `tests/test_traceability.py` enforces it against the Status column of `docs/requirements.md`.
 - Every outgoing Discord payload sets `allowed_mentions: {"parse": []}`; player names are always made safe (`code_text` in images, `escape_markdown` in message text).
 - User-facing text is in English and lives only in `messages.py`.
 - Never log secrets, tokens, or full Cobra/Discord payloads.

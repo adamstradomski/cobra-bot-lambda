@@ -76,6 +76,7 @@ def _images(reply: object) -> Images:
 # --- commands ------------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-01")
 def test_pairings() -> None:
     cache, _ = _setup()
 
@@ -108,6 +109,7 @@ def test_player() -> None:
     assert page.filename == "players-1.png"
 
 
+@pytest.mark.req("FR-12")
 def test_shortcode_reference() -> None:
     cache, _ = _setup()
 
@@ -134,6 +136,7 @@ def test_no_players_match() -> None:
 # --- round and state errors ---------------------------------------------------------
 
 
+@pytest.mark.req("FR-16")
 @pytest.mark.parametrize(
     ("command", "reply"),
     [
@@ -152,6 +155,7 @@ def test_round_state_errors(command: Command, reply: str) -> None:
 # --- FR-16 errors ---------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-16")
 @pytest.mark.parametrize("tournament", ["abc!", "https://example.com/tournaments/1"])
 def test_invalid_reference(tournament: str) -> None:
     cache, _ = _setup()
@@ -159,6 +163,7 @@ def test_invalid_reference(tournament: str) -> None:
     assert run(Command("standings", tournament), cache) == messages.INVALID_REFERENCE
 
 
+@pytest.mark.req("FR-16")
 @pytest.mark.parametrize(
     ("tournament", "reply"),
     [("1", messages.TOURNAMENT_NOT_FOUND), ("ZQXJ", messages.TOURNAMENT_NOT_FOUND)],
@@ -170,6 +175,7 @@ def test_not_found(tournament: str, reply: str) -> None:
     assert run(Command("standings", tournament), cache) == reply
 
 
+@pytest.mark.req("FR-16")
 @pytest.mark.parametrize(
     ("error", "reply"),
     [
@@ -184,6 +190,7 @@ def test_cobra_failures_without_cache(error: CobraError, reply: str) -> None:
     assert run(Command("standings", "4909"), cache) == reply
 
 
+@pytest.mark.req("FR-15")
 @pytest.mark.parametrize(
     ("error", "notice"),
     [
@@ -212,6 +219,7 @@ def test_unreadable_export(body: bytes) -> None:
     assert run(Command("standings", "4909"), cache) == messages.COBRA_DATA_UNREADABLE
 
 
+@pytest.mark.req("FR-13", "AC-26")
 def test_ac26_standings_before_the_first_round_list_the_registered_players() -> None:
     """Players registered, no round paired: standings list them; pairings say
     the tournament has not started."""
@@ -334,6 +342,7 @@ def test_standings_whose_points_fit_a_round_log_nothing(
 # --- top cut and bracket -----------------------------------------------------------
 
 
+@pytest.mark.req("FR-02", "FR-19")
 def test_pairings_of_a_top_cut_round() -> None:
     cache, _ = _setup()
 
@@ -354,6 +363,7 @@ def test_default_pairings_show_the_latest_round_in_the_top_cut() -> None:
     )
 
 
+@pytest.mark.req("FR-19", "FR-23", "AC-29")
 def test_top_cut() -> None:
     cache, _ = _setup()
 
@@ -364,6 +374,7 @@ def test_top_cut() -> None:
     assert page.filename == "top-cut-1.png"
 
 
+@pytest.mark.req("FR-19", "FR-24", "AC-30")
 def test_bracket() -> None:
     cache, _ = _setup()
 
@@ -377,6 +388,7 @@ def test_bracket() -> None:
     assert page.png.startswith(b"\x89PNG")
 
 
+@pytest.mark.req("FR-23", "AC-29")
 @pytest.mark.parametrize("name", ["top-cut", "bracket"])
 def test_no_top_cut(name: str) -> None:
     cache, _ = _setup()
@@ -384,6 +396,7 @@ def test_no_top_cut(name: str) -> None:
     assert run(Command(name, "5018"), cache) == messages.NO_TOP_CUT  # type: ignore[arg-type]
 
 
+@pytest.mark.req("FR-24")
 def test_bracket_for_a_cut_size_without_one() -> None:
     export = json.loads(fixture_bytes("single_sided_top8"))
     export["cutToTop"] = 6

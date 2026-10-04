@@ -4,6 +4,8 @@ must not load Pillow, which only the Worker needs to draw reply images."""
 import subprocess
 import sys
 
+import pytest
+
 
 def _loaded_after(statement: str) -> list[str]:
     # A fresh interpreter: this test session has already imported Pillow.
@@ -17,6 +19,7 @@ def _loaded_after(statement: str) -> list[str]:
     return [m.strip("' ") for m in result.stdout.strip()[1:-1].split(",") if m]
 
 
+@pytest.mark.req("NFR-04")
 def test_interactions_handler_does_not_load_pillow() -> None:
     assert _loaded_after("import cobra_bot.handlers.interactions") == []
 

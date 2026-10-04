@@ -47,6 +47,9 @@ testpaths = ["tests"]
 pythonpath = ["tests"]  # shared helpers: tests/builders.py
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
+markers = [
+    "req(*ids): requirement and acceptance-criterion IDs the test covers (FR-xx, NFR-xx, AC-xx); checked by tests/test_traceability.py",
+]
 filterwarnings = ["error"]
 
 [dependency-groups]

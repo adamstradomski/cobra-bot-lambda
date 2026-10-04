@@ -22,6 +22,7 @@ def test_fixtures_exist() -> None:
     }
 
 
+@pytest.mark.req("NFR-11")
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 def test_fixture_is_anonymised(path: Path, anonymizer: ModuleType) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))

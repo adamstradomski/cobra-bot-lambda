@@ -41,6 +41,7 @@ def _standings(t: Tournament) -> StandingsView:
 # --- pairings -----------------------------------------------------------------------
 
 
+@pytest.mark.req("AC-03")
 def test_ac03_default_pairings_header_names_the_top_cut_round(
     raw_fixture: LoadRaw,
 ) -> None:
@@ -64,6 +65,7 @@ def test_swiss_round_header(raw_fixture: LoadRaw) -> None:
     )
 
 
+@pytest.mark.req("FR-03", "AC-07")
 def test_ac07_in_progress_header(raw_fixture: LoadRaw) -> None:
     t = _fixture(raw_fixture, "dss", 5018)
 
@@ -88,6 +90,7 @@ def test_stale_notice(private: bool, line: str) -> None:
 # --- standings ----------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-06", "AC-01", "AC-28")
 def test_ac01_finished_tournament_header(raw_fixture: LoadRaw) -> None:
     t = _fixture(raw_fixture, "single_sided_top8")
     head = header.standings(t, _standings(t))
@@ -102,6 +105,7 @@ def test_ac01_finished_tournament_header(raw_fixture: LoadRaw) -> None:
     )
 
 
+@pytest.mark.req("FR-06", "AC-08", "AC-28")
 def test_ac08_no_completed_round_header() -> None:
     t = tournament((pairing(1, seat(1, "corp"), seat(2, "runner")),))
 
@@ -111,6 +115,7 @@ def test_ac08_no_completed_round_header() -> None:
     )
 
 
+@pytest.mark.req("AC-26")
 def test_ac26_registration_header() -> None:
     t = tournament(players=(player(1, "Ann"), player(2, "Bob")))
 
@@ -129,6 +134,7 @@ def test_stale_private_notice() -> None:
     )
 
 
+@pytest.mark.req("AC-28")
 @pytest.mark.parametrize(
     ("status", "note"),
     [
@@ -145,6 +151,7 @@ def test_cut_note_per_status(status: str, note: str) -> None:
     assert messages.cut_note(status, 16) == note
 
 
+@pytest.mark.req("FR-06", "AC-28")
 def test_cut_note_sits_between_the_title_and_the_data_line() -> None:
     t = tournament(
         ROUND_1, players=(player(1, rank=1, points=3), player(2, rank=2)), cut_to_top=2
@@ -191,23 +198,27 @@ def test_more_matches_note() -> None:
     assert head.notes == ("…and 4 more matched",)
 
 
+@pytest.mark.req("AC-11")
 def test_no_match() -> None:
     """AC-11 output."""
     assert header.players(_t(), _result(), "nobody").notes == ("No players match.",)
 
 
+@pytest.mark.req("NFR-10")
 def test_query_is_escaped() -> None:
     head = header.players(_t(), _result(), "*x_")
 
     assert head.lines[0] == "**Players matching “\\*x\\_”**"
 
 
+@pytest.mark.req("AC-27")
 def test_several_names_note_each_name_without_a_match() -> None:
     head = header.players(_t(), _names(("ali", 1, 0), ("zed", 0, 0)), "ali, zed")
 
     assert head.notes == ("No players match “zed”.",)
 
 
+@pytest.mark.req("AC-27")
 def test_several_names_note_each_name_with_more_matches() -> None:
     head = header.players(_t(), _names(("ali", 1, 0), ("player", 7, 4)), "q")
 
@@ -220,6 +231,7 @@ def test_several_names_are_escaped_in_notes() -> None:
     assert head.notes == (r"No players match “\*x\_”.",)
 
 
+@pytest.mark.req("AC-27")
 def test_names_past_the_limit_are_reported() -> None:
     head = header.players(_t(), _names(("ali", 1, 0), skipped=2), "q")
 

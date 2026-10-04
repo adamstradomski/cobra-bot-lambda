@@ -133,6 +133,7 @@ def test_fit(text: str, width: int, fitted: str) -> None:
     assert fit(text, width) == fitted
 
 
+@pytest.mark.req("FR-08")
 @pytest.mark.parametrize(
     ("identity", "label"),
     [
@@ -158,6 +159,7 @@ def test_corp_label(identity: str | None, label: str) -> None:
     assert corp_label(identity) == label
 
 
+@pytest.mark.req("FR-08")
 @pytest.mark.parametrize(
     ("identity", "label"),
     [
@@ -186,6 +188,7 @@ def test_short_names_fit_the_column() -> None:
         assert code_text(name) == name, name
 
 
+@pytest.mark.req("FR-08")
 def test_missing_id_is_logged_once(caplog: pytest.LogCaptureFixture) -> None:
     """A-2 / acceptance 6: a fallback logs a warning, once per ID."""
     with caplog.at_level(logging.WARNING):
@@ -241,6 +244,7 @@ def test_round_out_of_range_message() -> None:
     )
 
 
+@pytest.mark.req("FR-08")
 def test_a_later_id_with_a_known_prefix_gets_the_prefix_short_name(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

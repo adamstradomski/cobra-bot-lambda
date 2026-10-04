@@ -54,6 +54,7 @@ def test_500_is_unavailable() -> None:
         _client(lambda _: httpx.Response(500)).fetch_tournament(1)
 
 
+@pytest.mark.req("NFR-16")
 def test_timeout_is_unavailable() -> None:
     def timeout(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("slow", request=request)
@@ -81,6 +82,7 @@ def test_redirect_to_error_is_not_found(location: str) -> None:
         _client(_redirect(location)).fetch_tournament(99999999)
 
 
+@pytest.mark.req("FR-21")
 def test_401_is_private() -> None:
     body = '{"error":"🔒 Sorry, you can\'t do that"}'.encode()
     with pytest.raises(Private):
@@ -105,6 +107,7 @@ def test_unexpected_responses_are_unavailable(response: httpx.Response) -> None:
 # --- shortcodes (findings Q4) ---------------------------------------------------------
 
 
+@pytest.mark.req("FR-12")
 def test_shortcode_resolves_from_redirect() -> None:
     seen: list[httpx.Request] = []
     client = _client(_redirect(f"{BASE}/tournaments/5018"), seen)
@@ -140,6 +143,7 @@ def test_shortcode_unexpected_responses_are_unavailable(
 # --- client configuration (NFR-16) ----------------------------------------------------
 
 
+@pytest.mark.req("NFR-16")
 def test_http_client_settings() -> None:
     with make_http_client() as http:
         assert http.headers["User-Agent"] == USER_AGENT

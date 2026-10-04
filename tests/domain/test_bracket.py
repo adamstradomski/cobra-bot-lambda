@@ -110,6 +110,7 @@ def test_every_cut_size_cobra_supports_has_a_template() -> None:
     }
 
 
+@pytest.mark.req("FR-24", "AC-30")
 @pytest.mark.parametrize(
     ("fixture", "size"), [("single_sided_top8", 8), ("large_top_cut", 16)]
 )
@@ -125,6 +126,7 @@ def test_real_cuts_fit_the_double_elimination_template(
 # --- format detection ---------------------------------------------------------------
 
 
+@pytest.mark.req("FR-24")
 def test_top8_single_elimination_is_told_by_round_one_seeds() -> None:
     t = _cut(8, (_game(1, 1, 8), _game(2, 2, 7), _game(3, 3, 6), _game(4, 4, 5)))
 
@@ -175,6 +177,7 @@ def test_cut_size_without_a_bracket() -> None:
 # --- cut status -----------------------------------------------------------------------
 
 
+@pytest.mark.req("FR-22")
 def test_status_none_without_a_cut() -> None:
     t = tournament((pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),))
 
@@ -183,14 +186,17 @@ def test_status_none_without_a_cut() -> None:
     assert b.top_cut_view(t) == b.NoTopCut()
 
 
+@pytest.mark.req("FR-22")
 def test_status_announced_once_the_cut_is_made() -> None:
     assert b.cut_status(_cut(8)) == "announced"
 
 
+@pytest.mark.req("FR-22")
 def test_status_in_progress_with_a_cut_round() -> None:
     assert b.cut_status(_cut(4, (_game(1, 1, 4), _game(2, 2, 3)))) == "in_progress"
 
 
+@pytest.mark.req("FR-22")
 def test_status_finished_once_cobra_places_the_winner() -> None:
     t = _cut(4, (_game(1, 1, 4, 1), _game(2, 2, 3, 2)), placed={1: 1})
 
@@ -232,6 +238,7 @@ def test_real_cut_seeds_match_cobras(raw_fixture: LoadRaw) -> None:
 # --- bracket view -------------------------------------------------------------------
 
 
+@pytest.mark.req("AC-30")
 def test_before_round_one_the_first_games_show_the_seeds() -> None:
     view = b.bracket_view(_cut(4))
 
@@ -325,6 +332,7 @@ def test_winner_and_loser_of_an_unreported_game_are_unknown() -> None:
 # --- top-cut ranking -----------------------------------------------------------------
 
 
+@pytest.mark.req("FR-23", "AC-29")
 def test_placed_players_take_their_places_and_the_rest_wait_above_them() -> None:
     """Top 4 double elimination after round 2: 3 lost to 2 and to 4 (out, not
     placed yet: Cobra places 3rd and 4th together); 1 and 2 still in."""
@@ -343,6 +351,7 @@ def test_placed_players_take_their_places_and_the_rest_wait_above_them() -> None
     ]
 
 
+@pytest.mark.req("FR-23", "AC-29")
 def test_still_playing_before_out_and_later_out_higher() -> None:
     """Top 8 double after round 2 of the cut: losers of game 7 and 8 are out
     in round 2, losers of round 1 who won in round 2 still play."""
