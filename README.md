@@ -83,7 +83,6 @@ uv run scripts/preview.py tests/fixtures/single_sided_top8.json bracket
 | `uv run ruff check .` | Lints all Python files. Add `--fix` to apply safe fixes. |
 | `uv run ruff format --check .` | Checks formatting without changing files. Run `uv run ruff format .` to reformat. Markdown files are excluded. |
 | `uv run mypy src` | Type-checks `src/` in strict mode. |
-| `UPDATE_GOLDEN=1 uv run pytest tests/formatting/test_golden.py` | Rewrites the golden files in `tests/golden/` (the code-block embed payloads of the standings and pairings formatters for the `single_sided_top8` and `dss` fixtures; the bot now sends these two as pictures, and player cards use the same rows) from the current renderer instead of comparing against them. Review the diff before committing; without the variable the test fails on any difference. |
 | `uv run scripts/preview.py SOURCE COMMAND` | Posts a reply rendered from a local Cobra export to your Discord test channel, without deploying ([details](docs/scripts.md#scriptspreviewpy--see-a-reply-in-discord-without-deploying)). |
 | `sam validate --lint` | Checks [`template.yaml`](template.yaml) with the SAM translator and cfn-lint. Needs no AWS credentials. |
 | `sam build` | Builds both functions from `src/` into `.aws-sam/build/` (git-ignored). It installs `src/requirements.txt` with Linux wheels for the Lambda runtime and needs `python3.14` on `PATH`. |

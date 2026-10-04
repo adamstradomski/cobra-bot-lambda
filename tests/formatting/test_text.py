@@ -12,7 +12,6 @@ from cobra_bot.formatting.text import (
     display_width,
     escape_markdown,
     fit,
-    pad,
     runner_label,
     short_identity,
     standings_url,
@@ -73,9 +72,9 @@ COMBINING_DIAERESIS = chr(0x0308)
     ("name", "safe"),
     [
         ("@Mention", "@Mention"),  # pings are blocked by allowed_mentions (AC-21)
-        ("*bold_name~", "*bold_name~"),  # markdown does not render in code blocks
+        ("*bold_name~", "*bold_name~"),  # images do not render markdown
         (r"back\slash", r"back\slash"),
-        ("a`b", "a'b"),  # C-7
+        ("a`b", "a'b"),  # cannot close a code block
         ("```@everyone", "'''@everyone"),
         (f"red{ESC}[1;31mname", "red[1;31mname"),
         (f"bell{chr(7)}zero{chr(0x200B)}width", "bellzerowidth"),
@@ -108,7 +107,7 @@ def test_code_text(name: str, safe: str) -> None:
     ("text", "width"),
     [
         ("abc", 3),
-        ("Żółw", 4),  # diacritics take one column (C-5)
+        ("Żółw", 4),  # diacritics take one column
         (f"Mae{COMBINING_DIAERESIS}lig", 6),  # combining marks take none
         (f"a{CJK}b", 4),  # wide characters take two
         (f"a{EMOJI}b", 4),
@@ -132,19 +131,6 @@ def test_display_width(text: str, width: int) -> None:
 )
 def test_fit(text: str, width: int, fitted: str) -> None:
     assert fit(text, width) == fitted
-
-
-def test_twenty_character_name_is_cut_to_fifteen_plus_ellipsis() -> None:
-    """Embed format acceptance 4."""
-    assert fit("A" * 20, 16) == "A" * 15 + "…"
-
-
-@pytest.mark.parametrize(
-    ("text", "padded"),
-    [("ab", "ab   "), (f"{EMOJI}a", f"{EMOJI}a  "), ("abcdef", "abcdef")],
-)
-def test_pad_uses_display_width(text: str, padded: str) -> None:
-    assert pad(text, 5) == padded
 
 
 @pytest.mark.parametrize(

@@ -1,5 +1,5 @@
-"""Text helpers: Discord markdown escaping, code-block text and column widths, ID
-labels, timestamps, Cobra links."""
+"""Text helpers: Discord markdown escaping, safe player text, widths, ID labels,
+timestamps, Cobra links."""
 
 import logging
 import re
@@ -26,11 +26,10 @@ _MARKDOWN = re.compile(r"([\\*_~`|>#\-\[\]()<:])")
 _WHITESPACE = re.compile(r"\s+")
 # A nickname in straight or curly quotes: René "Loup" Arcemont -> Loup.
 _NICKNAME = re.compile(r"[\"“]([^\"“”]+)[\"”]")
-# Stands in for a backtick, which would close the code block around a name (C-7).
+# Stands in for a backtick, so a name cannot close a code block or inline code.
 _BACKTICK_STANDIN = "'"
 ELLIPSIS = "…"
-ID_WIDTH = 9  # columns for a short ID (A-1)
-NAME_WIDTH = 15  # columns for a player name (C-7)
+ID_WIDTH = 9  # columns for a short ID (FR-08)
 
 type TimestampStyle = Literal["t", "T", "d", "D", "f", "F", "R"]
 
@@ -46,12 +45,11 @@ def escape_markdown(text: str) -> str:
 
 
 def code_text(text: str) -> str:
-    """Make user-provided text (player names, IDs) safe inside an ```ansi block.
+    """Make user-provided text (player names, IDs) safe to draw in an image.
 
-    Markdown does not render there, so nothing is escaped; but a backtick could
-    close the block and a control character (e.g. ESC) could inject colours, so
-    backticks become `'` and control and format characters are dropped.
-    Whitespace runs collapse to one space, and the text is NFC-normalised.
+    Nothing is escaped, since images do not render markdown; backticks become
+    `'`, control and format characters (e.g. ESC) are dropped, whitespace runs
+    collapse to one space, and the text is NFC-normalised.
     """
     flat = _WHITESPACE.sub(" ", unicodedata.normalize("NFC", text)).strip()
     kept = "".join(c for c in flat if not unicodedata.category(c).startswith("C"))
@@ -59,7 +57,7 @@ def code_text(text: str) -> str:
 
 
 def display_width(text: str) -> int:
-    """Columns `text` takes in a monospaced font (C-5).
+    """Columns `text` takes in a monospaced font.
 
     Combining marks take none; wide and full-width characters (CJK, most emoji)
     take two; everything else, including letters with diacritics, one.
@@ -87,15 +85,10 @@ def fit(text: str, width: int) -> str:
     return "".join(kept) + ELLIPSIS
 
 
-def pad(text: str, width: int) -> str:
-    """Left-align `text` in `width` columns (by display width, not `len`)."""
-    return text + " " * max(0, width - display_width(text))
-
-
 def short_identity(identity: str | None) -> str:
-    """A-5: the text before the first `:` ("Nuvem SA: Law of the Land" -> "Nuvem SA").
+    """The text before the first `:` ("Nuvem SA: Law of the Land" -> "Nuvem SA").
 
-    Missing identities render as a placeholder (A-4).
+    Missing identities render as a placeholder.
     """
     if not identity or not identity.strip():
         return messages.UNKNOWN_IDENTITY
@@ -109,7 +102,7 @@ def _full_identity(identity: str) -> str:
 
 @cache
 def corp_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Corp ID from the map (keyed by the whole ID),
+    """FR-08: the short Corp ID from the map (keyed by the whole ID),
     else its prefix's short name (`Haas-Bioroid` -> `HB`), else the name
     before `:`, cut to 9 columns. A missing entry is logged once per ID and
     process."""
@@ -127,7 +120,7 @@ def corp_label(identity: str | None) -> str:
 
 @cache
 def runner_label(identity: str | None) -> str:
-    """FR-08, A-1–A-2: the short Runner ID from the map (keyed by the whole ID),
+    """FR-08: the short Runner ID from the map (keyed by the whole ID),
     else its prefix's short name, else the quoted
     nickname or the first word of the name before `:`, cut to 9 columns. A
     missing entry is logged once per ID and process."""

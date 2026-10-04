@@ -20,7 +20,7 @@ from cobra_bot.domain.rounds import (
     standings_view,
 )
 from cobra_bot.formatting import image as c
-from cobra_bot.formatting.document import EMBED_COLOR
+from cobra_bot.formatting.embed import EMBED_COLOR
 from cobra_bot.formatting.image import Cell, Column, Fonts, Table
 from cobra_bot.formatting.text import corp_label, runner_label
 
@@ -453,7 +453,7 @@ def test_one_page_header_and_omission_together(
     fonts: Fonts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(c, "MAX_ROWS", 2)
-    monkeypatch.setattr(c, "MAX_MESSAGES", 1)
+    monkeypatch.setattr(c, "MAX_PAGES", 1)
     t = _standings_cup(3)
 
     (page,) = c.standings_images(t, _standings(t), fonts)

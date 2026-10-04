@@ -4,7 +4,6 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from builders import pairing, player, seat, tournament
 from cobra_bot.discord.api import (
     DETAIL_CHARS,
     USER_AGENT,
@@ -15,15 +14,7 @@ from cobra_bot.discord.api import (
     image_payload,
     make_http_client,
 )
-from cobra_bot.domain.rounds import (
-    PairingsView,
-    StandingsView,
-    pairings_view,
-    standings_view,
-)
-from cobra_bot.formatting.chunking import FIELD_NAME, Embed, ImagePage, chunk
-from cobra_bot.formatting.pairings import format_pairings
-from cobra_bot.formatting.standings import format_standings
+from cobra_bot.formatting.embed import Embed, ImagePage
 
 APP = "123456"
 TOKEN = "secret-interaction-token"
@@ -50,78 +41,41 @@ class Recorder:
         return [json.loads(r.content) for r in self.requests]
 
 
-def _message(text: str = "x") -> tuple[Embed, ...]:
-    return (Embed(description=text),)
-
-
 # --- AC-21 ---------------------------------------------------------------------------
 
 
-def test_ac21_every_payload_blocks_mentions_and_names_stay_in_code_blocks() -> None:
-    """Names sit in ```ansi code blocks, where markdown and mentions do not render;
-    a name cannot close the block early."""
-    names = ("@Mention", "*bold_name~", "```@everyone")
-    players = tuple(player(i, names[i % 3], rank=i) for i in range(1, 301))
-    rnd = tuple(
-        pairing(t, seat(2 * t - 1, "corp", 3), seat(2 * t, "runner", 0))
-        for t in range(1, 151)
-    )
-    t = tournament(rnd, players=players)
-    standings = standings_view(t)
-    pairings = pairings_view(t)
-    assert isinstance(standings, StandingsView)
-    assert isinstance(pairings, PairingsView)
-    documents = [format_standings(t, standings), format_pairings(t, pairings)]
+def test_ac21_every_reply_blocks_mentions() -> None:
+    """Text, embed and image replies all set `allowed_mentions: {"parse": []}`,
+    so a name such as `@Mention` in a header never pings anyone."""
     recorder = Recorder()
     client = recorder.client()
+    page = ImagePage(Embed("**Players matching “@Mention”**"), "players-1.png", b"x")
 
-    for doc in documents:
-        messages = chunk(doc)
-        assert len(messages) > 1  # follow-ups are covered too
-        client.send(TOKEN, messages)
+    client.send_text(TOKEN, "@everyone")
+    client.send_embed(TOKEN, Embed("@everyone"))
 
-    payloads = recorder.payloads()
-    assert payloads
-    parts: list[str] = []
-    for payload in payloads:
-        assert payload["allowed_mentions"] == {"parse": []}
-        embeds = payload["embeds"]
-        assert isinstance(embeds, list)
-        for e in embeds:
-            parts += [e["description"], *(f["value"] for f in e.get("fields", []))]
-    for part in parts:
-        # Every part opens and closes its own block; names never add a fence.
-        assert part.count("```") == 2, part
-    text = "\n".join(parts)
-    assert "*bold_name~" in text  # literal inside the code block, not escaped
-    assert "@Mention" in text  # pings are blocked by allowed_mentions
-    assert "'''@everyone" in text  # backticks replaced (C-7)
+    payloads = [*recorder.payloads(), image_payload([page])]
+    assert [p["allowed_mentions"] for p in payloads] == [{"parse": []}] * 3
 
 
 # --- routing --------------------------------------------------------------------------
 
 
-def test_first_message_edits_original_rest_are_follow_ups() -> None:
+def test_send_embed_edits_the_original_response() -> None:
     recorder = Recorder()
 
-    recorder.client().send(TOKEN, [_message("a"), _message("b"), _message("c")])
+    recorder.client().send_embed(TOKEN, Embed(description="a"))
 
     assert [(r.method, str(r.url)) for r in recorder.requests] == [
         ("PATCH", f"{WEBHOOK}/messages/@original"),
-        ("POST", WEBHOOK),
-        ("POST", WEBHOOK),
     ]
-    assert [p["embeds"] for p in recorder.payloads()] == [
-        [{"description": "a"}],
-        [{"description": "b"}],
-        [{"description": "c"}],
-    ]
+    assert recorder.payloads()[0]["embeds"] == [{"description": "a"}]
 
 
-def test_follow_ups_are_public() -> None:
+def test_embed_reply_is_public() -> None:
     recorder = Recorder()
 
-    recorder.client().send(TOKEN, [_message("a"), _message("b")])
+    recorder.client().send_embed(TOKEN, Embed(description="a"))
 
     assert all("flags" not in p for p in recorder.payloads())
 
@@ -134,7 +88,7 @@ def test_embed_title_and_url() -> None:
         url="https://tournaments.nullsignal.games/tournaments/1",
     )
 
-    recorder.client().send(TOKEN, [(embed,)])
+    recorder.client().send_embed(TOKEN, embed)
 
     assert recorder.payloads()[0]["embeds"] == [
         {
@@ -145,22 +99,14 @@ def test_embed_title_and_url() -> None:
     ]
 
 
-def test_embed_colour_fields_and_footer() -> None:
+def test_embed_colour_and_footer() -> None:
     recorder = Recorder()
-    embed = Embed(description="d", fields=("f1", "f2"), footer="legend", color=0xE0B23A)
+    embed = Embed(description="d", footer="legend", color=0xE0B23A)
 
-    recorder.client().send(TOKEN, [(embed,)])
+    recorder.client().send_embed(TOKEN, embed)
 
     assert recorder.payloads()[0]["embeds"] == [
-        {
-            "description": "d",
-            "color": 14725690,
-            "fields": [
-                {"name": FIELD_NAME, "value": "f1", "inline": False},
-                {"name": FIELD_NAME, "value": "f2", "inline": False},
-            ],
-            "footer": {"text": "legend"},
-        }
+        {"description": "d", "color": 14725690, "footer": {"text": "legend"}}
     ]
 
 

@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import pytest
 
-from builders import FETCHED_AT, FETCHED_AT_TAG, fixture_bytes, plain
+from builders import FETCHED_AT, FETCHED_AT_TAG, fixture_bytes
 from cobra_bot import fonts as bundled_fonts
 from cobra_bot import messages
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
@@ -16,7 +16,7 @@ from cobra_bot.cobra.client import CobraError, NotFound, Private, Unavailable
 from cobra_bot.commands import Command, Images, Job, Reply, execute, parse_command
 from cobra_bot.domain.models import Player
 from cobra_bot.domain.rounds import name_order
-from cobra_bot.formatting.chunking import Message
+from cobra_bot.formatting.embed import Embed
 
 type LoadRaw = Callable[[str], object]
 
@@ -73,17 +73,6 @@ def _images(reply: object) -> Images:
     return reply
 
 
-def _messages(reply: object) -> tuple[Message, ...]:
-    assert isinstance(reply, tuple), reply
-    return reply
-
-
-def _text(reply: tuple[Message, ...]) -> str:
-    """All embed text, without colours."""
-    parts = (part for m in reply for e in m for part in (e.description, *e.fields))
-    return plain("\n".join(parts))
-
-
 # --- commands ------------------------------------------------------------------------
 
 
@@ -132,9 +121,14 @@ def test_shortcode_reference() -> None:
 def test_no_players_match() -> None:
     cache, _ = _setup()
 
-    reply = _messages(run(Command("player", "4909", query="nobody"), cache))
+    reply = run(Command("player", "4909", query="nobody"), cache)
 
-    assert "No players match." in _text(reply)
+    assert isinstance(reply, Embed), reply
+    assert reply.description == (
+        f"**Players matching “nobody”**\nData from {FETCHED_AT_TAG}\nNo players match."
+    )
+    assert reply.title == "Single-Sided Top 8 Fixture"
+    assert reply.image is None
 
 
 # --- round and state errors ---------------------------------------------------------

@@ -30,8 +30,8 @@ from cobra_bot.domain.bracket import (
     WinnerOf,
 )
 from cobra_bot.domain.models import Seat, Tournament
-from cobra_bot.formatting.chunking import Embed, ImagePage
-from cobra_bot.formatting.document import EMBED_COLOR, data_line, heading
+from cobra_bot.formatting.embed import EMBED_COLOR, Embed, ImagePage
+from cobra_bot.formatting.header import data_line, heading
 from cobra_bot.formatting.image import (
     BACKGROUND,
     CORP,

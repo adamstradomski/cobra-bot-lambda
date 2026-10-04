@@ -22,7 +22,7 @@ src/cobra_bot/
   discord/      # signature verification, webhook client
   cobra/        # refs, HTTP client, cache logic, S3 store, JSON parser
   domain/       # models, round state, search — pure, no I/O
-  formatting/   # text, embeds, chunking, reply images — pure, no I/O
+  formatting/   # reply images, their embed text, text helpers — pure, no I/O
   fonts/        # bundled Noto Sans for the images (SIL OFL)
   messages.py   # all user-facing strings
 scripts/        # capture_snapshots.py, anonymize_fixture.py, register_commands.py,
@@ -53,7 +53,7 @@ Before finishing any task, run pytest, ruff check, ruff format --check and mypy 
 - Unit tests never touch the network or real AWS; use fixtures, mocked HTTP, the in-memory `CacheStore`, and botocore `Stubber`.
 - Fixtures from real tournaments are committed only after anonymisation (`scripts/anonymize_fixture.py`). Tests refer to players by Cobra player ID, not by name.
 - Every acceptance criterion (`AC-xx` in `docs/spec.md`) has at least one test; reference the AC ID in the test name or docstring.
-- Every outgoing Discord payload sets `allowed_mentions: {"parse": []}`; player names are always made safe (`code_text` inside code blocks, `escape_markdown` elsewhere).
+- Every outgoing Discord payload sets `allowed_mentions: {"parse": []}`; player names are always made safe (`code_text` in images, `escape_markdown` in message text).
 - User-facing text is in English and lives only in `messages.py`.
 - Never log secrets, tokens, or full Cobra/Discord payloads.
 - Type hints everywhere; no `Any` without a comment explaining why.

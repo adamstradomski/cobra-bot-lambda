@@ -67,7 +67,7 @@ class WorkerApp:
             elif isinstance(reply, Images):
                 webhook.send_images(job.token, reply.pages)
             else:
-                webhook.send(job.token, reply)
+                webhook.send_embed(job.token, reply)
         except DiscordError as err:
             # Discord's short error body names the cause (e.g. Unknown Message);
             # it never holds the token, which is only in the URL.

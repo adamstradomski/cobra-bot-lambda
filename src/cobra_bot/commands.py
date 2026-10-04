@@ -36,8 +36,8 @@ from cobra_bot.domain.rounds import (
     standings_view,
 )
 from cobra_bot.domain.search import search_names
-from cobra_bot.formatting.chunking import ImagePage, Message, chunk
-from cobra_bot.formatting.players import format_player_cards
+from cobra_bot.formatting import header
+from cobra_bot.formatting.embed import EMBED_COLOR, Embed, ImagePage
 
 if TYPE_CHECKING:
     from cobra_bot.formatting.image import Draw, Fonts, Table
@@ -145,8 +145,8 @@ class Images:
     pages: tuple[ImagePage, ...]
 
 
-# Chunked embed messages (player cards), image pages, or one plain text reply.
-type Reply = tuple[Message, ...] | Images | str
+# Image pages, an embed without an image (no player found), or one sentence.
+type Reply = Images | Embed | str
 
 
 def execute(
@@ -271,8 +271,14 @@ def _run(
         case "player":
             query = command.query or ""
             found = search_names(ranked_players(t), query)
-            if not found.matches:  # one sentence, no table to draw
-                return chunk(format_player_cards(t, found, query, private=private))
+            if not found.matches:  # the header and notes, no table to draw
+                head = header.players(t, found, query, private=private)
+                return Embed(
+                    description="\n".join([*head.lines, *head.notes]),
+                    title=head.title,
+                    url=head.url,
+                    color=EMBED_COLOR,
+                )
             return Images(
                 image.player_images(t, found, query, fonts, private=private, draw=draw)
             )

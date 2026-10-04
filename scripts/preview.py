@@ -8,10 +8,10 @@ from a local Cobra export, to check the layout without building or deploying.
 
 The reply goes through the same code as the Worker (`commands.execute`, the
 cache, the parser, the image renderer and formatters, the payload builders), so
-the messages are the production ones: images for pairings and standings, an
-embed for player cards. Cobra is never contacted. Messages are posted through a
-channel webhook (`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the project
-environment. See docs/scripts.md for options and exit codes.
+the messages are the production ones: images, or one embed when nothing is
+drawn (an error, no player found). Cobra is never contacted. Messages are
+posted through a channel webhook (`DISCORD_PREVIEW_WEBHOOK_URL`). Runs in the
+project environment. See docs/scripts.md for options and exit codes.
 """
 
 import argparse
@@ -138,7 +138,7 @@ def posts(reply: Reply) -> list[Post]:
         return [
             Post(discord.image_payload(reply.pages), discord.image_files(reply.pages))
         ]
-    return [Post(discord.message_payload(message)) for message in reply]
+    return [Post(discord.message_payload([reply]))]
 
 
 def webhook_target(env: Mapping[str, str]) -> tuple[str, str]:
