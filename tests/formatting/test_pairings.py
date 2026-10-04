@@ -60,18 +60,40 @@ def test_ac02_round_1_table_21_is_a_bye(raw_fixture: LoadRaw) -> None:
     assert "T21 BYE Player0023" in [plain(e.text) for e in doc.entries]
 
 
-def test_ac03_default_pairings_header(raw_fixture: LoadRaw) -> None:
+def test_ac03_default_pairings_header_names_the_top_cut_round(
+    raw_fixture: LoadRaw,
+) -> None:
     t = _fixture(raw_fixture, "single_sided_top8")
     doc = format_pairings(t, _view(t))
 
     assert doc.header == (
-        "**Round 8 pairings — complete**",
-        "-# Top cut in progress — not supported yet",
+        "**Top cut round 6 pairings — complete**",
         f"Data from {FETCHED_AT_TAG}",
     )
     assert doc.title == "Single-Sided Top 8 Fixture"
     assert doc.url == "https://tournaments.nullsignal.games/tournaments/4909"
+
+
+def test_swiss_round_header_has_no_top_cut_note(raw_fixture: LoadRaw) -> None:
+    t = _fixture(raw_fixture, "single_sided_top8")
+    doc = format_pairings(t, _view(t, 8))
+
+    assert doc.header == (
+        "**Round 8 pairings — complete**",
+        f"Data from {FETCHED_AT_TAG}",
+    )
     assert doc.footer == ("Round 8 · 23 tables · Corp first · number = points scored")
+
+
+def test_top_cut_game_shows_its_number_and_winner(raw_fixture: LoadRaw) -> None:
+    """Game 1 of the top 8: the Runner (seat 2) won."""
+    t = _fixture(raw_fixture, "single_sided_top8")
+    doc = format_pairings(t, _view(t, 9))
+
+    assert plain(doc.entries[0].text).split("\n") == [
+        "G1   L Player0042 · Nuvem",
+        "     W Player0037 · Magdalene",
+    ]
 
 
 def test_ac22_double_sided_pairing_shows_both_games(raw_fixture: LoadRaw) -> None:

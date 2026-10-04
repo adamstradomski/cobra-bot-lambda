@@ -1,13 +1,12 @@
 """Player cards for `/cobra player` (FR-09, FR-10; SPEC §9).
 
 Each card, in the ```ansi code block: the player's standings entry, then their
-pairing in the latest Swiss round (or bye). A blank line separates the cards. A
-note is added while a top cut is in progress.
+pairing in the latest round, Swiss or top cut (or bye). A blank line separates
+the cards.
 """
 
 from cobra_bot import messages
 from cobra_bot.domain.models import Player, Tournament
-from cobra_bot.domain.rounds import swiss_round_numbers, top_cut_in_progress
 from cobra_bot.domain.search import MAX_NAMES, NamesResult
 from cobra_bot.formatting import ansi
 from cobra_bot.formatting.ansi import RESET
@@ -16,7 +15,6 @@ from cobra_bot.formatting.document import (
     Entry,
     data_line,
     heading,
-    subtext,
 )
 from cobra_bot.formatting.pairings import pairing_rows, table_width
 from cobra_bot.formatting.standings import rank_width, standings_row
@@ -26,10 +24,10 @@ from cobra_bot.formatting.text import escape_markdown, tournament_url
 def format_player_cards(
     t: Tournament, result: NamesResult, query: str, *, private: bool = False
 ) -> Document:
-    header = [heading(messages.players_header(escape_markdown(query)))]
-    if top_cut_in_progress(t):
-        header.append(subtext(messages.TOP_CUT_IN_PROGRESS))
-    header.append(data_line(t, private=private))
+    header = [
+        heading(messages.players_header(escape_markdown(query))),
+        data_line(t, private=private),
+    ]
     notes = _notes(result)
     return Document(
         title=t.name,
@@ -64,9 +62,8 @@ def _notes(result: NamesResult) -> list[str]:
 
 def player_card(t: Tournament, player: Player) -> str:
     lines = [standings_row(player, rank_width((player,)))]
-    swiss = swiss_round_numbers(t)
-    if swiss:
-        number = swiss[-1]
+    if t.rounds:
+        number = len(t.rounds)
         pairings = t.rounds[number - 1]
         pairing = next((p for p in pairings if player.id in p.player_ids), None)
         if pairing is None:

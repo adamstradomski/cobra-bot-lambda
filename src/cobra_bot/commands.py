@@ -16,13 +16,20 @@ from cobra_bot.cobra.cache import TournamentCache
 from cobra_bot.cobra.client import NotFound, Private, Unavailable
 from cobra_bot.cobra.parser import parse_tournament
 from cobra_bot.cobra.refs import InvalidTournamentRef, TournamentId, parse_ref
+from cobra_bot.domain.bracket import (
+    BracketUnavailable,
+    BracketView,
+    NoTopCut,
+    TopCutView,
+    bracket_view,
+    top_cut_view,
+)
 from cobra_bot.domain.models import Tournament
 from cobra_bot.domain.rounds import (
     NotStarted,
     PairingsView,
     RoundOutOfRange,
     StandingsView,
-    TopCutNotSupported,
     pairings_view,
     ranked_players,
     standings_view,
@@ -37,10 +44,12 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-type CommandName = Literal["pairings", "standings", "player"]
+type CommandName = Literal["pairings", "standings", "player", "top-cut", "bracket"]
 
 COMMAND = "cobra"
-SUBCOMMANDS: frozenset[str] = frozenset({"pairings", "standings", "player"})
+SUBCOMMANDS: frozenset[str] = frozenset(
+    {"pairings", "standings", "player", "top-cut", "bracket"}
+)
 
 
 @dataclass(frozen=True)
@@ -130,7 +139,7 @@ def _command(
 
 @dataclass(frozen=True)
 class Images:
-    """A reply as image pages: pairings and standings (SPEC §9)."""
+    """A reply as image pages: pairings, standings, top cut, bracket (SPEC §9)."""
 
     pages: tuple[ImagePage, ...]
 
@@ -193,7 +202,7 @@ def _run(
 ) -> Reply:
     # Imported here: it loads Pillow, which InteractionsFunction (it imports this
     # module for parse_command) must not pay for within Discord's 3 s.
-    from cobra_bot.formatting import image
+    from cobra_bot.formatting import bracket_image, image
 
     draw: Draw | None = None
     if images is not None:
@@ -211,8 +220,6 @@ def _run(
                     return messages.NOT_STARTED
                 case RoundOutOfRange(requested=requested, last_round=last):
                     return messages.round_out_of_range(requested, last)
-                case TopCutNotSupported():
-                    return messages.TOP_CUT_NOT_SUPPORTED
                 case PairingsView() as pairings:
                     return Images(
                         image.pairings_images(
@@ -227,6 +234,30 @@ def _run(
                     return Images(
                         image.standings_images(
                             t, standings, fonts, private=private, draw=draw
+                        )
+                    )
+        case "top-cut":
+            match top_cut_view(t):
+                case NoTopCut():
+                    return messages.NO_TOP_CUT
+                case TopCutView() as cut:
+                    return Images(
+                        image.top_cut_images(t, cut, fonts, private=private, draw=draw)
+                    )
+        case "bracket":
+            match bracket_view(t):
+                case NoTopCut():
+                    return messages.NO_TOP_CUT
+                case BracketUnavailable(size=size):
+                    return messages.bracket_unavailable(size)
+                case BracketView() as bracket:
+                    return Images(
+                        bracket_image.bracket_images(
+                            t,
+                            bracket,
+                            fonts,
+                            private=private,
+                            png=images.png if images is not None else None,
                         )
                     )
         case "player":

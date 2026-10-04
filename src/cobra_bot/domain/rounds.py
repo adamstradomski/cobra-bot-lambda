@@ -6,6 +6,7 @@ first and elimination (top cut) rounds follow them in the same list.
 
 from dataclasses import dataclass, replace
 
+from cobra_bot.domain.bracket import CutStatus, cut_size, cut_status
 from cobra_bot.domain.models import Pairing, Player, Round, Tournament
 from cobra_bot.domain.search import normalize
 
@@ -22,16 +23,11 @@ class RoundOutOfRange:
 
 
 @dataclass(frozen=True)
-class TopCutNotSupported:
-    round_number: int
-
-
-@dataclass(frozen=True)
 class PairingsView:
     round_number: int
     pairings: Round
     complete: bool
-    top_cut_in_progress: bool
+    cut_round: int | None = None  # the bracket round, for a top-cut round
 
 
 @dataclass(frozen=True)
@@ -39,9 +35,11 @@ class StandingsView:
     after_round: int  # 0 = no completed Swiss round yet
     players: tuple[Player, ...]  # in Cobra's rank order
     started: bool = True  # False: registration only, no round paired yet
+    cut: CutStatus | None = None  # the top cut's state, once Swiss is over
+    cut_size: int = 0
 
 
-type PairingsResult = PairingsView | NotStarted | RoundOutOfRange | TopCutNotSupported
+type PairingsResult = PairingsView | NotStarted | RoundOutOfRange
 type StandingsResult = StandingsView | NotStarted
 
 
@@ -69,10 +67,6 @@ def is_round_complete(rnd: Round) -> bool:
 
 def swiss_round_numbers(t: Tournament) -> list[int]:
     return [n for n, rnd in enumerate(t.rounds, start=1) if is_swiss(rnd)]
-
-
-def top_cut_in_progress(t: Tournament) -> bool:
-    return any(not is_swiss(rnd) for rnd in t.rounds)
 
 
 def last_complete_swiss_round(t: Tournament) -> int:
@@ -108,32 +102,39 @@ def standings_round(t: Tournament) -> int:
 
 
 def pairings_view(t: Tournament, requested: int | None = None) -> PairingsResult:
-    """Pairings for `requested`, or for the latest Swiss round when it is None."""
+    """Pairings for `requested`, or for the latest round (Swiss or top cut) when
+    it is None."""
     if not t.rounds:
         return NotStarted()
     if requested is None:
-        swiss = swiss_round_numbers(t)
-        if not swiss:
-            return TopCutNotSupported(round_number=len(t.rounds))
-        number = swiss[-1]
+        number = len(t.rounds)
     elif not 1 <= requested <= len(t.rounds):
         return RoundOutOfRange(requested=requested, last_round=len(t.rounds))
-    elif not is_swiss(t.rounds[requested - 1]):
-        return TopCutNotSupported(round_number=requested)
     else:
         number = requested
     rnd = t.rounds[number - 1]
+    cut = [n for n, r in enumerate(t.rounds, start=1) if not is_swiss(r)]
     return PairingsView(
         round_number=number,
         pairings=rnd,
         complete=is_round_complete(rnd),
-        top_cut_in_progress=top_cut_in_progress(t),
+        cut_round=cut.index(number) + 1 if number in cut else None,
     )
+
+
+def swiss_over(t: Tournament) -> bool:
+    """Every Swiss round paired so far is complete and counted in the standings,
+    or the cut has been made. Cobra does not export how many Swiss rounds are
+    planned, so between two rounds this holds too."""
+    swiss = swiss_round_numbers(t)
+    if t.cut_to_top > 0 or len(swiss) < len(t.rounds):
+        return True
+    return bool(swiss) and standings_round(t) == len(swiss)
 
 
 def standings_view(t: Tournament) -> StandingsResult:
     """Standings after the last Swiss round Cobra has counted (`standings_round`),
-    using Cobra's rank as-is.
+    using Cobra's rank as-is, and the top cut's state once Swiss is over.
 
     With no complete round yet, the players are still listed in rank order (AC-08).
     Before the first round is paired, the registered players are listed as Cobra
@@ -147,6 +148,8 @@ def standings_view(t: Tournament) -> StandingsResult:
         after_round=standings_round(t),
         players=ranked_players(t),
         started=bool(t.rounds),
+        cut=cut_status(t) if swiss_over(t) else None,
+        cut_size=cut_size(t),
     )
 
 

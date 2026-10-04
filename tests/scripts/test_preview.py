@@ -17,6 +17,7 @@ from cobra_bot.discord.api import text_payload
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 DSS = str(FIXTURES_DIR / "dss.json")
+TOP8 = str(FIXTURES_DIR / "single_sided_top8.json")
 WEBHOOK_TOKEN = "hook-secret_TOKEN-1"
 WEBHOOK_URL = f"https://discord.com/api/webhooks/123/{WEBHOOK_TOKEN}"
 ENV = {"DISCORD_PREVIEW_WEBHOOK_URL": WEBHOOK_URL}
@@ -496,3 +497,21 @@ def test_webhook_url_comes_from_the_env_file(
 
     (request,) = seen
     assert str(request.url).endswith(f"/webhooks/123/{WEBHOOK_TOKEN}")
+
+
+@pytest.mark.parametrize(
+    ("command", "header"),
+    [
+        ("top-cut", "**Top 8 cut — finished**"),
+        ("bracket", "**Top 8 bracket (double elimination) — finished**"),
+    ],
+)
+def test_top_cut_commands(
+    preview_script: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+    header: str,
+) -> None:
+    payloads = _dry_run(preview_script, capsys, [TOP8, command])
+
+    assert _description(payloads).startswith(header)

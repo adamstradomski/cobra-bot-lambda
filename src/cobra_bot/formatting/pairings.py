@@ -22,7 +22,8 @@ T1   3 Alice
 ```
 
 Unreported points show `–`, intentional draws `ID`; a bye is one line,
-`T5  BYE Carol`.
+`T5  BYE Carol`. A top-cut game is labelled with its game number (`G13`) and
+shows `W` / `L` instead of points.
 """
 
 from cobra_bot import messages
@@ -37,7 +38,6 @@ from cobra_bot.formatting.document import (
     heading,
     identity,
     player_name,
-    subtext,
 )
 from cobra_bot.formatting.text import (
     corp_label,
@@ -58,10 +58,12 @@ type Points = tuple[str, str]  # points as shown, ANSI style of the player's nam
 def format_pairings(
     t: Tournament, view: PairingsView, *, private: bool = False
 ) -> Document:
-    header = [heading(messages.pairings_header(view.round_number, view.complete))]
-    if view.top_cut_in_progress:
-        header.append(subtext(messages.TOP_CUT_IN_PROGRESS))
-    header.append(data_line(t, private=private))
+    title_line = (
+        messages.cut_pairings_header(view.cut_round, view.complete)
+        if view.cut_round
+        else messages.pairings_header(view.round_number, view.complete)
+    )
+    header = [heading(title_line), data_line(t, private=private)]
     ordered = sorted(view.pairings, key=lambda p: p.table)
     width = table_width(ordered)
     double_sided = any(p.double_sided for p in ordered)
@@ -76,11 +78,16 @@ def format_pairings(
 
 def table_width(pairings: list[Pairing]) -> int:
     """Width of the table-label column: the longest `T<n>` plus a space."""
-    return max([MIN_TABLE_WIDTH, *(len(f"T{p.table}") + 1 for p in pairings)])
+    return max([MIN_TABLE_WIDTH, *(len(table_label(p)) + 1 for p in pairings)])
+
+
+def table_label(pairing: Pairing) -> str:
+    """`T12` for a table, `G12` for a top-cut game."""
+    return f"{'G' if pairing.elimination else 'T'}{pairing.table}"
 
 
 def pairing_rows(t: Tournament, pairing: Pairing, width: int = MIN_TABLE_WIDTH) -> str:
-    label = f"T{pairing.table}"
+    label = table_label(pairing)
     if pairing.is_bye:
         # P-4: a bye shows no ID.
         (player_id,) = pairing.player_ids or (None,)
@@ -93,9 +100,12 @@ def pairing_rows(t: Tournament, pairing: Pairing, width: int = MIN_TABLE_WIDTH) 
         return _double_sided(t, pairing, label, width)
     # Single-sided games always have roles (findings Q3); the Corp comes first.
     corp, runner = (s1, s2) if s1.role == "corp" else (s2, s1)
-    corp_points, runner_points = _points(
-        pairing, corp.combined_score, runner.combined_score
-    )
+    if pairing.elimination:
+        corp_points, runner_points = _results(corp.winner, runner.winner)
+    else:
+        corp_points, runner_points = _points(
+            pairing, corp.combined_score, runner.combined_score
+        )
     corp_id, runner_id = _corp_id(_player(t, corp)), _runner_id(_player(t, runner))
     return "\n".join(
         [
@@ -158,6 +168,16 @@ def _points(
         (shown[0], ansi.STRONG if won else ansi.SECONDARY),
         (shown[1], ansi.SECONDARY if won else ansi.STRONG),
     )
+
+
+def _results(first: bool | None, second: bool | None) -> tuple[Points, Points]:
+    """A top-cut game: `W` bold for the winner, `L` secondary for the loser,
+    `–` for both while unreported."""
+    if not first and not second:
+        unreported = (messages.NO_RESULT, ansi.PRIMARY)
+        return unreported, unreported
+    won, lost = (messages.WIN, ansi.STRONG), (messages.LOSS, ansi.SECONDARY)
+    return (won, lost) if first else (lost, won)
 
 
 def _shown(points: int | None) -> str:

@@ -119,3 +119,12 @@ Exception: runs before the repo scaffold, as a standalone script; not covered by
 ### T25 — Manual acceptance test
 - Run AC-20 on a test server and via user install; record results in `docs/acceptance.md`.
 - **DoD:** all checklist items pass or have issues filed.
+
+## Phase 7 — Top cut (2026-10-04)
+
+### T26 — Top-cut pairings, ranking and bracket
+- `pairings` shows the latest round, Swiss or top cut; a requested top-cut round is shown instead of "Top cut is not supported yet" (FR-02, FR-19).
+- `standings` notes the top cut's state once Swiss is over (FR-06, FR-22).
+- New subcommands `/cobra top-cut` and `/cobra bracket` (FR-23, FR-24); `domain/bracket.py` with Cobra's bracket templates, `formatting/bracket_image.py`; parser reads `eliminationPlayers`; the anonymiser keeps the null places of a live cut.
+- Re-register the commands (`scripts/register_commands.py`) after deploying.
+- **DoD:** AC-03, AC-04, AC-28 to AC-30 pass; the bracket and top-cut images checked by eye against Cobra's pages for 4909 and 4990.

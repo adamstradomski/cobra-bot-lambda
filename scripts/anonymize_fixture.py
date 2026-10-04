@@ -198,11 +198,15 @@ def _player(
 def _elimination_player(
     entry: object, id_map: dict[int, int], names: dict[int, str]
 ) -> JsonObject:
+    """A place in the cut ranking. While the cut is played, Cobra exports the
+    places not decided yet with `id`, `name` and `seed` null; they stay null."""
     obj = _check_keys(entry, ELIMINATION_PLAYER_KEYS, "eliminationPlayers[]")
     new_id = _remap(obj.get("id"), id_map, "eliminationPlayers[].id")
-    if new_id is None:
-        raise AnonymizeError("eliminationPlayers[].id: unexpected null")
     out = dict(obj)
+    if new_id is None:
+        if obj.get("name") is not None:
+            raise AnonymizeError("eliminationPlayers[]: a name without an id")
+        return out
     out["id"] = new_id
     out["name"] = names[new_id]
     return out

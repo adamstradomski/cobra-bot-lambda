@@ -205,6 +205,8 @@ def _parser() -> argparse.ArgumentParser:
     pairings = commands.add_parser("pairings", parents=[common])
     pairings.add_argument("--round", type=int, help="round number (default: latest)")
     commands.add_parser("standings", parents=[common])
+    commands.add_parser("top-cut", parents=[common])
+    commands.add_parser("bracket", parents=[common])
     player = commands.add_parser("player", parents=[common])
     player.add_argument("query", help="player name or part of it")
     return parser

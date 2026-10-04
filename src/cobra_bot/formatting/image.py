@@ -20,19 +20,27 @@ from typing import Literal
 from PIL import Image, ImageDraw, ImageFont
 
 from cobra_bot import messages
+from cobra_bot.domain.bracket import CutEntry, TopCutView
 from cobra_bot.domain.models import Pairing, Player, Seat, Tournament
-from cobra_bot.domain.rounds import (
-    PairingsView,
-    StandingsView,
-    swiss_round_numbers,
-)
+from cobra_bot.domain.rounds import PairingsView, StandingsView
 from cobra_bot.domain.search import NamesResult
 from cobra_bot.formatting.chunking import DISCORD_LIMITS, Embed, ImagePage
-from cobra_bot.formatting.document import EMBED_COLOR, Document
-from cobra_bot.formatting.pairings import format_pairings
+from cobra_bot.formatting.document import (
+    EMBED_COLOR,
+    Document,
+    data_line,
+    heading,
+)
+from cobra_bot.formatting.pairings import format_pairings, table_label
 from cobra_bot.formatting.players import format_player_cards
 from cobra_bot.formatting.standings import format_standings
-from cobra_bot.formatting.text import code_text, corp_label, fit, runner_label
+from cobra_bot.formatting.text import (
+    code_text,
+    corp_label,
+    fit,
+    runner_label,
+    standings_url,
+)
 
 # Bump when the drawing changes in a way the cells and style constants in
 # `table_key` do not show, so cached images are not reused (image_cache.py).
@@ -231,25 +239,30 @@ def pairings_table(t: Tournament, view: PairingsView) -> Table:
             ),
             groups=tuple(_double_sided(t, p) for p in ordered),
         )
+    elimination = any(p.elimination for p in ordered)
     return Table(
         columns=(
-            Column(messages.TABLE),
+            Column(messages.GAME if elimination else messages.TABLE),
             Column(messages.PLAYER),
             Column(messages.SIDE),
             Column(messages.IDENTITY),
-            Column(messages.POINTS, "right"),
+            Column(messages.RESULT if elimination else messages.POINTS, "right"),
         ),
         groups=tuple(_single_sided(t, p) for p in ordered),
     )
 
 
 def _single_sided(t: Tournament, pairing: Pairing) -> Group:
-    label = f"T{pairing.table}"
+    label = table_label(pairing)
     if pairing.is_bye:
         return (_bye_row(t, pairing, columns=5),)
     s1, s2 = pairing.seat1, pairing.seat2
     corp, runner = (s1, s2) if s1.role == "corp" else (s2, s1)
-    styles = _styles(pairing, corp.combined_score, runner.combined_score)
+    styles = (
+        _results(corp.winner, runner.winner)
+        if pairing.elimination
+        else _styles(pairing, corp.combined_score, runner.combined_score)
+    )
     rows = []
     for seat, side, color, (points, style), label_text in (
         (corp, messages.CORP, CORP, styles[0], label),
@@ -324,6 +337,19 @@ def _styles(
     )
 
 
+def _results(
+    first: bool | None, second: bool | None
+) -> tuple[tuple[str, Style], tuple[str, Style]]:
+    """A top-cut game: the winner `W` and bold, the loser `L` and secondary;
+    `–` and plain while unreported."""
+    if not first and not second:
+        plain: Style = (TEXT, False)
+        return (messages.NO_RESULT, plain), (messages.NO_RESULT, plain)
+    won: tuple[str, Style] = (messages.WIN, (TEXT, True))
+    lost: tuple[str, Style] = (messages.LOSS, (SECONDARY, False))
+    return (won, lost) if first else (lost, won)
+
+
 def _bye_row(t: Tournament, pairing: Pairing, *, columns: int) -> Row:
     """Table, player, `BYE` in the third column, the rest empty."""
     (player_id,) = pairing.player_ids or (None,)
@@ -375,9 +401,10 @@ def _total(seat: Seat) -> int | None:
 
 def players_table(t: Tournament, players: Sequence[Player]) -> Table:
     """One row per player: the standings columns, then the player's table in
-    the latest Swiss round, the side played there, the opponent and the score
-    from the player's side. Before any round only the standings columns."""
-    swiss = swiss_round_numbers(t)
+    the latest round (Swiss or top cut), the side played there, the opponent
+    and the score from the player's side. Before any round only the standings
+    columns."""
+    latest = len(t.rounds)
     columns: tuple[Column, ...] = (
         Column(messages.RANK, "right"),
         Column(messages.PLAYER),
@@ -386,9 +413,9 @@ def players_table(t: Tournament, players: Sequence[Player]) -> Table:
         Column(messages.POINTS, "right"),
         Column(messages.SOS, "right"),
     )
-    if swiss:
+    if latest:
         columns += (
-            Column(messages.player_round(swiss[-1])),
+            Column(messages.player_round(latest)),
             Column(messages.SIDE),
             Column(messages.OPPONENT),
             Column(messages.SCORE, "right"),
@@ -403,8 +430,8 @@ def players_table(t: Tournament, players: Sequence[Player]) -> Table:
             Cell(str(p.match_points), SCORE, bold=True),
             Cell(f"{p.sos:.3f}", SECONDARY),
         )
-        if swiss:
-            row += _latest_pairing(t, p, swiss[-1])
+        if latest:
+            row += _latest_pairing(t, p, latest)
         rows.append((row,))
     return Table(columns=columns, groups=tuple(rows))
 
@@ -418,7 +445,7 @@ def _latest_pairing(t: Tournament, p: Player, number: int) -> Row:
             Cell(messages.NOT_PAIRED, SECONDARY),
             Cell(""),
         )
-    label = Cell(f"T{pairing.table}")
+    label = Cell(table_label(pairing))
     if pairing.is_bye:
         return (label, Cell(""), Cell(messages.BYE, SECONDARY), Cell(""))
     mine, theirs = (
@@ -439,6 +466,14 @@ def _latest_pairing(t: Tournament, p: Player, number: int) -> Row:
             messages.CORP if corp else messages.RUNNER, CORP if corp else RUNNER
         )
         points = (mine.combined_score, theirs.combined_score)
+    if pairing.elimination:
+        (shown, (color, bold)), _ = _results(mine.winner, theirs.winner)
+        result = (
+            Cell(shown, SECONDARY)
+            if color == SECONDARY or shown == messages.NO_RESULT
+            else Cell(shown, SCORE, bold)
+        )
+        return (label, side, Cell(_seat_name(_player(t, theirs))), result)
     return (
         label,
         side,
@@ -456,6 +491,36 @@ def _score(pairing: Pairing, mine: int | None, theirs: int | None) -> Cell:
     if mine is None and theirs is None:
         return Cell(messages.NO_RESULT, SECONDARY)
     return Cell(f"{shown} – {other}", SECONDARY if color == SECONDARY else SCORE, bold)
+
+
+def top_cut_table(view: TopCutView) -> Table:
+    """Like standings: place (blank while not decided), player, IDs, games won
+    and lost in the cut, seed. Players still in the cut bold, those out
+    secondary."""
+    return Table(
+        columns=(
+            Column(messages.RANK, "right"),
+            Column(messages.PLAYER),
+            Column(messages.CORP),
+            Column(messages.RUNNER),
+            Column(messages.RECORD, "right"),
+            Column(messages.SEED, "right"),
+        ),
+        groups=tuple((_cut_row(e),) for e in view.entries),
+    )
+
+
+def _cut_row(e: CutEntry) -> Row:
+    p = e.player
+    name = _name(p) if p else messages.UNKNOWN_PLAYER
+    return (
+        Cell(str(e.rank) if e.rank is not None else ""),
+        Cell(name, SECONDARY) if e.eliminated else Cell(name, bold=True),
+        _identity(p.corp_identity if p else None, CORP),
+        _identity(p.runner_identity if p else None, RUNNER),
+        Cell(messages.record(e.wins, e.losses), SCORE, bold=not e.eliminated),
+        Cell(str(e.seed) if e.seed is not None else "", SECONDARY),
+    )
 
 
 # --- messages ---------------------------------------------------------------
@@ -491,7 +556,11 @@ def pairings_images(
     draw: Draw | None = None,
 ) -> tuple[ImagePage, ...]:
     doc = format_pairings(t, view, private=private)
-    footer = messages.compact_pairings_footer(view.round_number, len(view.pairings))
+    footer = (
+        messages.compact_cut_pairings_footer(view.round_number, len(view.pairings))
+        if view.cut_round
+        else messages.compact_pairings_footer(view.round_number, len(view.pairings))
+    )
     return image_pages(
         doc,
         pairings_table(t, view),
@@ -500,6 +569,29 @@ def pairings_images(
         "pairings",
         row_entries=False,
         draw=draw,
+    )
+
+
+def top_cut_images(
+    t: Tournament,
+    view: TopCutView,
+    fonts: Fonts,
+    *,
+    private: bool = False,
+    draw: Draw | None = None,
+) -> tuple[ImagePage, ...]:
+    doc = Document(
+        title=t.name,
+        url=standings_url(t.id),
+        header=(
+            heading(messages.top_cut_header(view.size, view.status)),
+            data_line(t, private=private),
+        ),
+        entries=(),
+    )
+    footer = messages.compact_top_cut_footer(view.size, len(view.entries))
+    return image_pages(
+        doc, top_cut_table(view), footer, fonts, "top-cut", row_entries=True, draw=draw
     )
 
 
@@ -515,10 +607,7 @@ def player_images(
     """The players found, as rows (`players_table`); the header names the
     query and the notes say which names matched nobody or more."""
     doc = format_player_cards(t, result, query, private=private)
-    swiss = swiss_round_numbers(t)
-    footer = messages.compact_players_footer(
-        swiss[-1] if swiss else None, len(result.matches)
-    )
+    footer = messages.compact_players_footer(len(t.rounds) or None, len(result.matches))
     return image_pages(
         doc,
         players_table(t, result.matches),

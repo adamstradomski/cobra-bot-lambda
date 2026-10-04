@@ -21,6 +21,7 @@ from cobra_bot.formatting.document import (
     data_line,
     heading,
     identity,
+    subtext,
 )
 from cobra_bot.formatting.text import (
     NAME_WIDTH,
@@ -59,7 +60,15 @@ def format_standings(
     return Document(
         title=t.name,
         url=standings_url(t.id),
-        header=(heading(title_line), data_line(t, private=private)),
+        header=(
+            heading(title_line),
+            *(
+                [subtext(messages.cut_note(view.cut, view.cut_size))]
+                if view.cut
+                else []
+            ),
+            data_line(t, private=private),
+        ),
         entries=tuple(entries),
         footer=messages.standings_footer(view.after_round, len(view.players)),
     )

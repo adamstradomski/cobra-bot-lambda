@@ -11,7 +11,15 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from cobra_bot import messages
-from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tournament
+from cobra_bot.domain.models import (
+    EliminationPlayer,
+    Pairing,
+    Player,
+    Role,
+    Round,
+    Seat,
+    Tournament,
+)
 
 ROLES: dict[object, Role] = {"corp": "corp", "runner": "runner"}
 
@@ -41,6 +49,17 @@ def parse_tournament(
         ),
         fetched_at=fetched_at,
         stale=stale,
+        elimination_players=tuple(
+            sorted(
+                (
+                    _elimination_player(e, f"eliminationPlayers[{i}]")
+                    for i, e in enumerate(
+                        _list(top.get("eliminationPlayers"), "eliminationPlayers")
+                    )
+                ),
+                key=lambda e: e.rank,
+            )
+        ),
     )
 
 
@@ -60,6 +79,17 @@ def _player(raw: object, where: str) -> Player:
         corp_identity=_str(obj.get("corpIdentity")),
         runner_faction=_str(obj.get("runnerFaction")),
         runner_identity=_str(obj.get("runnerIdentity")),
+    )
+
+
+def _elimination_player(raw: object, where: str) -> EliminationPlayer:
+    """A place in the cut ranking; its player is null until the place is decided
+    (Cobra's `nrtm_json.rb`)."""
+    obj = _mapping(raw, where)
+    return EliminationPlayer(
+        rank=_int(obj.get("rank"), f"{where}.rank"),
+        player_id=_opt_int(obj.get("id"), f"{where}.id"),
+        seed=_opt_int(obj.get("seed"), f"{where}.seed"),
     )
 
 

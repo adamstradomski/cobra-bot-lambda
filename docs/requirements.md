@@ -1,6 +1,6 @@
 # Requirements — Cobra Discord Bot
 
-Status: Draft v0.3 · 2026-10-03
+Status: Draft v0.4 · 2026-10-04
 
 ## 1. Purpose
 
@@ -28,15 +28,15 @@ The bot is public. It can be added to any Discord server (server install) and by
 | ID | Priority | Requirement |
 |----|----------|-------------|
 | FR-01 | Must | Slash command `/cobra pairings <tournament> [round]` posts pairings publicly in the channel. |
-| FR-02 | Must | Without `round`, pairings are shown for the latest Swiss round. With `round`, for that Swiss round. If a top cut is in progress, the latest Swiss round is shown with the note "Top cut in progress — not supported yet". |
+| FR-02 | Must | Without `round`, pairings are shown for the latest round, Swiss or top cut (changed 2026-10-04: the latest round always). With `round`, for that round; rounds are numbered by their position in Cobra's export, Swiss rounds first, then the top-cut rounds. A top-cut round is headed "Top cut round N pairings" and shows game numbers and the winner (`W`/`L`) instead of tables and points. |
 | FR-03 | Must | Pairings output states which round it shows and whether that round is in progress or complete. |
 | FR-04 | Must | Each pairing shows: table number, both player names, roles and identities (IDs), and results if reported. Byes and intentional draws are shown explicitly. |
 | FR-05 | Must | Both single-sided Swiss (one game per round) and double-sided Swiss (two games per round) are supported. |
-| FR-06 | Must | Slash command `/cobra standings <tournament>` posts standings publicly, stating after which round they apply. If no round is complete yet, it says "No completed rounds yet" and lists the players in the order Cobra gives them (`rank`). |
+| FR-06 | Must | Slash command `/cobra standings <tournament>` posts the Swiss standings publicly, stating after which round they apply. If no round is complete yet, it says "No completed rounds yet" and lists the players in the order Cobra gives them (`rank`). Once Swiss is over (every Swiss round so far complete and counted, or a cut made), a note gives the top cut's state: none on Cobra yet, announced but not started, in progress, or finished (FR-22). |
 | FR-07 | Must | Each standings row shows: rank, player name, match points, Strength of Schedule (SoS), Corp ID and Runner ID. |
 | FR-08 | Must | IDs are displayed in short form: the text before the first `:`, mapped to a short name of at most 9 columns (e.g. "Nuvem SA: Law of the Land" → "Nuvem", "Haas-Bioroid: Precision Design" → "HB"), with a fallback for IDs missing from the map (SPEC §9; `docs/embeded_format.md` A-1–A-4). The images use the same short names. |
 | FR-09 | Must | Slash command `/cobra player <tournament> <query>` replies publicly (changed from ephemeral on 2026-10-03, so a group can follow its players together). `query` may list up to 10 names separated by commas, e.g. `Alice, Bob, Carol`; each is searched on its own and every matching player gets a card, once, in rank order. Matching is a substring match that ignores letter case and diacritics (e.g. `maelig` matches "Maëlig", `zolw` matches "Żółw"). |
-| FR-10 | Must | Player search returns up to 3 matches, ordered by rank; if more exist, it says how many more matched. Each match shows rank, points, SoS, IDs and the player's pairing in the latest Swiss round (table, opponent, role, result) or bye. If a top cut is in progress, the reply notes that top cut pairings are not supported yet. |
+| FR-10 | Must | Player search returns up to 3 matches, ordered by rank; if more exist, it says how many more matched. Each match shows rank, points, SoS, IDs and the player's pairing in the latest round, Swiss or top cut (table or game, opponent, role, result) or bye. |
 | FR-11 | Must | `<tournament>` accepts a numeric ID or a Cobra URL (any page under `/tournaments/{id}/…`). |
 | FR-12 | Should | `<tournament>` also accepts a shortcode (e.g. `HBYM`), if Cobra offers a reliable way to resolve it (see T01). |
 | FR-13 | Must | If the tournament has not started (no rounds), the bot says so; standings instead list the registered players, if there are any, as Cobra does (SPEC AC-26). |
@@ -45,8 +45,11 @@ The bot is public. It can be added to any Discord server (server install) and by
 | FR-16 | Must | Clear user-facing errors for: invalid tournament reference, tournament not found, tournament private (without cache), round out of range, Cobra unavailable without cache. |
 | FR-17 | Must | All bot responses are in English. |
 | FR-18 | Must | Commands work in servers where the bot is installed, and — for users who installed the bot on their account — in any server, DM or group DM. |
-| FR-19 | Could | Top cut (elimination) pairings, bracket and final ranking. In MVP, a request for an elimination round returns "Top cut is not supported yet". |
+| FR-19 | Must | Top cut (elimination) pairings (FR-02), bracket (FR-24) and ranking (FR-23). Added 2026-10-04, replacing the MVP reply "Top cut is not supported yet". |
 | FR-20 | Could | Extended SoS (eSoS) column in standings. |
+| FR-22 | Must | The top cut's state is derived from Cobra's export: none (`cutToTop` 0, no elimination round), announced (`cutToTop` set, no elimination round), in progress (an elimination round), finished (Cobra has placed a player first in `eliminationPlayers`). |
+| FR-23 | Must | Slash command `/cobra top-cut <tournament>` posts the top-cut ranking publicly, like standings: place (blank while Cobra has not decided it), player, Corp and Runner ID, games won and lost in the cut, seed. Players still in the cut come first, by seed, then those out but not placed, the later out higher; players out are shown secondary. Without a cut: "This tournament has no top cut on Cobra yet." |
+| FR-24 | Must | Slash command `/cobra bracket <tournament>` posts the top-cut bracket publicly as an image laid out like Cobra's bracket page (`/tournaments/{id}/bracket`): a column per bracket round, upper bracket above lower, a box per game with its number, links to the game its winner plays next; without faction logos or pronouns, IDs as short names. Unknown players say where they come from (`Seed 3`, `Winner of 13`, `Loser of 21`). Cobra's brackets (double elimination top 4/8/16, single elimination top 2/3/4/8/16) are supported; another cut size replies "There is no bracket for a top N cut." |
 | FR-21 | Must | Organisers can switch a tournament between public and private while it runs. If Cobra reports the tournament as private and cached data exists, the bot shows the cached data with a note that the tournament is now private and when the data was fetched. Without cached data, it says the tournament is private. |
 
 ## 5. Non-functional requirements

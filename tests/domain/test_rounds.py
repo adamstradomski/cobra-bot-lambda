@@ -13,7 +13,6 @@ from cobra_bot.domain.rounds import (
     PairingsView,
     RoundOutOfRange,
     StandingsView,
-    TopCutNotSupported,
     is_pairing_complete,
     name_order,
     pairings_view,
@@ -60,23 +59,31 @@ def _tournament(*rounds: Round, players: tuple[Player, ...] = ()) -> Tournament:
 # --- AC-03, AC-04, AC-05: single-sided with top cut --------------------------------
 
 
-def test_ac03_default_pairings_show_last_swiss_round_with_top_cut_note(
+def test_ac03_default_pairings_show_the_latest_round_even_in_the_top_cut(
     raw_fixture: LoadRaw,
 ) -> None:
     view = pairings_view(_fixture(raw_fixture, "single_sided_top8"))
 
     assert isinstance(view, PairingsView)
-    assert (view.round_number, view.complete, view.top_cut_in_progress) == (
-        8,
-        True,
-        True,
-    )
+    assert (view.round_number, view.complete, view.cut_round) == (14, True, 6)
 
 
-def test_ac04_elimination_round_is_not_supported(raw_fixture: LoadRaw) -> None:
+def test_ac04_a_requested_elimination_round_is_its_bracket_round(
+    raw_fixture: LoadRaw,
+) -> None:
     t = _fixture(raw_fixture, "single_sided_top8")
+    view = pairings_view(t, 9)
 
-    assert pairings_view(t, 9) == TopCutNotSupported(round_number=9)
+    assert isinstance(view, PairingsView)
+    assert (view.round_number, view.cut_round) == (9, 1)
+    assert view.pairings == t.rounds[8]
+
+
+def test_a_requested_swiss_round_has_no_bracket_round(raw_fixture: LoadRaw) -> None:
+    view = pairings_view(_fixture(raw_fixture, "single_sided_top8"), 8)
+
+    assert isinstance(view, PairingsView)
+    assert view.cut_round is None
 
 
 @pytest.mark.parametrize("requested", [0, 15, -1])
@@ -128,7 +135,7 @@ def test_ac07_round_in_progress(raw_fixture: LoadRaw) -> None:
 
     assert isinstance(pairings, PairingsView)
     assert (pairings.round_number, pairings.complete) == (3, False)
-    assert not pairings.top_cut_in_progress
+    assert pairings.cut_round is None
     assert isinstance(standings, StandingsView)
     assert standings.after_round == 2
 
@@ -263,7 +270,7 @@ def test_single_sided_needs_both_scores() -> None:
     assert not is_pairing_complete(half)
 
 
-def test_tournament_with_only_elimination_rounds_reports_top_cut() -> None:
+def test_tournament_with_only_elimination_rounds_shows_the_cut_round() -> None:
     elim = Pairing(
         1,
         Seat(1, "corp", None, None, None, True),
@@ -274,7 +281,10 @@ def test_tournament_with_only_elimination_rounds_reports_top_cut() -> None:
     )
     t = _tournament((elim,))
 
-    assert pairings_view(t) == TopCutNotSupported(round_number=1)
+    view = pairings_view(t)
+
+    assert isinstance(view, PairingsView)
+    assert (view.round_number, view.cut_round, view.complete) == (1, 1, True)
 
 
 # --- before the first round (AC-26) ---------------------------------------------
@@ -375,3 +385,70 @@ def test_ranked_players_after_pairing_keep_cobras_rank(raw_fixture: LoadRaw) -> 
 
     assert [p.rank for p in ranked] == sorted(p.rank for p in t.players)
     assert set(ranked) == set(t.players)  # unchanged players
+
+
+# --- standings: the top cut's state once Swiss is over --------------------------------
+
+
+def _swiss(score: int | None = 3) -> Round:
+    return (_single(1, 1, 2, score),)
+
+
+def _counted(points: int) -> tuple[Player, ...]:
+    return (
+        replace(_player(1, 1), match_points=points),
+        replace(_player(2, 2), match_points=points),
+    )
+
+
+def test_no_cut_note_while_the_latest_swiss_round_is_played() -> None:
+    t = _tournament(_swiss(), _swiss(None), players=_counted(3))
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert view.cut is None
+
+
+def test_no_cut_note_while_a_complete_round_is_not_counted() -> None:
+    t = _tournament(_swiss(), players=_counted(0))
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert (view.after_round, view.cut) == (0, None)
+
+
+def test_cut_note_none_once_every_swiss_round_is_counted() -> None:
+    """Cobra does not export the planned number of rounds: between two Swiss
+    rounds this reads the same."""
+    t = _tournament(_swiss(), players=_counted(3))
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert (view.cut, view.cut_size) == ("none", 0)
+
+
+def test_cut_note_announced_once_the_cut_is_made() -> None:
+    t = replace(_tournament(_swiss(None), players=_counted(0)), cut_to_top=8)
+
+    view = standings_view(t)
+
+    assert isinstance(view, StandingsView)
+    assert (view.cut, view.cut_size) == ("announced", 8)
+
+
+def test_cut_note_in_progress_and_finished(raw_fixture: LoadRaw) -> None:
+    t = _fixture(raw_fixture, "single_sided_top8")
+    live = replace(t, rounds=t.rounds[:10], elimination_players=())
+
+    assert getattr(standings_view(live), "cut", None) == "in_progress"
+    assert getattr(standings_view(t), "cut", None) == "finished"
+
+
+def test_no_cut_note_before_the_first_round() -> None:
+    view = standings_view(_tournament(players=_counted(0)))
+
+    assert isinstance(view, StandingsView)
+    assert view.cut is None
