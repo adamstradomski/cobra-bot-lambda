@@ -1,8 +1,8 @@
 name: Deploy
 
 # Deploys the cobra-bot stack after CI passes on a push to main. workflow_run always
-# uses this file as it is on the default branch (main). Setup: README.md,
-# "Automatic deployment from main".
+# uses this file as it is on the default branch (main). Setup:
+# docs/automatic-deployment.md.
 on:
   workflow_run:
     workflows: [CI]

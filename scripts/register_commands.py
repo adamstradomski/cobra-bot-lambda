@@ -3,7 +3,7 @@
 
 Overwrites the application's global commands with the definition in
 `cobra_bot.registration`. Runs in the project environment: `uv run
-scripts/register_commands.py`. See README.md for usage and exit codes.
+scripts/register_commands.py`. See docs/scripts.md for usage and exit codes.
 """
 
 import argparse

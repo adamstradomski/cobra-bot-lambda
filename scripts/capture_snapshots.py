@@ -10,7 +10,7 @@ changed response under ``snapshots/{id}/``. Probe mode fetches arbitrary paths
 once, without following redirects, to record status codes and redirect targets
 (shortcodes, non-existent and unpublished tournaments).
 
-Standard library only. See README.md for usage and exit codes.
+Standard library only. See docs/scripts.md for usage and exit codes.
 """
 
 import argparse
