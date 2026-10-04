@@ -20,7 +20,13 @@ def test_command_shape_matches_spec_section_2() -> None:
     subcommands = _options(definition)
 
     assert (definition["name"], definition["type"]) == ("cobra", 1)
-    assert list(subcommands) == ["pairings", "standings", "player"]
+    assert list(subcommands) == [
+        "pairings",
+        "standings",
+        "top-cut",
+        "bracket",
+        "player",
+    ]
     assert all(s["type"] == 1 for s in subcommands.values())
 
     pairings = _options(subcommands["pairings"])
@@ -37,6 +43,8 @@ def test_command_shape_matches_spec_section_2() -> None:
     }
 
     assert list(_options(subcommands["standings"])) == ["tournament"]
+    assert list(_options(subcommands["top-cut"])) == ["tournament"]
+    assert list(_options(subcommands["bracket"])) == ["tournament"]
 
     player = _options(subcommands["player"])
     assert player["query"] == {

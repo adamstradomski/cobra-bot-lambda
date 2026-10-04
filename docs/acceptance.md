@@ -18,7 +18,7 @@ Task T25. Run against a deployed stack (README, Deployment) and a real Cobra tou
 | # | Check | Expected | Result |
 |---|-------|----------|--------|
 | A1 | Install via the Install Link, **Add to server** | Only `applications.commands` requested; no permissions; no bot member joins the server | |
-| A2 | `/cobra pairings tournament:<id>` | Public reply; header "Round N pairings — …"; the latest Swiss round; "Top cut in progress — not supported yet" if the tournament has a cut | |
+| A2 | `/cobra pairings tournament:<id>` | Public reply; the latest round: "Round N pairings — …", or "Top cut round N pairings — …" with game numbers and W/L during a cut | |
 | A3 | `/cobra pairings tournament:<id> round:1` | Round 1 pairings as an image with column headings, two rows per table with the Corp first and the points each player scored; byes shown as one `BYE` row | |
 | A4 | `/cobra standings tournament:<large id>` | One message with several image pages (`N / M` in the footers), ranks in order; "…and N more — full list on Cobra" only if over 5 pages | |
 | A5 | `/cobra player tournament:<id> query:<part of a name>` | **Everyone** in the channel sees the reply; rank, points, SoS, IDs and the latest pairing or bye | |
@@ -28,7 +28,11 @@ Task T25. Run against a deployed stack (README, Deployment) and a real Cobra tou
 | A9 | `tournament:abc!` | "Invalid tournament reference. …" | |
 | A10 | `tournament:99999999` | "Tournament not found." | |
 | A11 | `round:` beyond the last round | "Round N does not exist. …" | |
-| A12 | `round:` pointing at a top-cut round | "Top cut is not supported yet." | |
+| A12 | `round:` pointing at a top-cut round | That bracket round's games, headed "Top cut round N pairings — …" | |
+| A14 | `/cobra standings` once Swiss is over | Below the header: "No top cut on Cobra yet", "Top N cut announced — not started yet", or "Top N cut in progress/finished — see `/cobra top-cut` and `/cobra bracket`" | |
+| A15 | `/cobra top-cut tournament:<id with a cut>` | Image like standings: place, player, IDs, W–L, seed; players still in bold | |
+| A16 | `/cobra bracket tournament:<id with a cut>` | One image laid out like Cobra's bracket page; short IDs, no logos or pronouns | |
+| A17 | `/cobra top-cut` and `/cobra bracket` for a tournament without a cut | "This tournament has no top cut on Cobra yet." | |
 | A13 | The same command twice within a minute | Second reply shows the same "Data from …" time (served from the cache) | |
 
 ## B. User install

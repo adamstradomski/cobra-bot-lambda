@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from cobra_bot.cobra.parser import ParseError, parse_tournament
-from cobra_bot.domain.models import Pairing, Seat, Tournament
+from cobra_bot.domain.models import EliminationPlayer, Pairing, Seat, Tournament
 
 FETCHED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
@@ -182,3 +182,58 @@ def test_unknown_keys_are_ignored() -> None:
 def test_malformed_exports_raise_parse_error(raw: object) -> None:
     with pytest.raises(ParseError):
         _parse(raw)
+
+
+# --- eliminationPlayers (the cut ranking) ------------------------------------------
+
+
+def _export(*entries: object) -> dict[str, object]:
+    return {"players": [], "rounds": [], "eliminationPlayers": list(entries)}
+
+
+def test_elimination_players_of_a_finished_cut(raw_fixture: LoadRaw) -> None:
+    t = _parse(raw_fixture("single_sided_top8"))
+
+    assert len(t.elimination_players) == 8
+    assert t.elimination_players[0] == EliminationPlayer(rank=1, player_id=1017, seed=2)
+
+
+def test_undecided_cut_places_have_no_player() -> None:
+    """Cobra's export while the cut is played: `id`, `name`, `seed` null."""
+    t = _parse(_export({"id": None, "name": None, "rank": 1, "seed": None}))
+
+    assert t.elimination_players == (EliminationPlayer(1, None, None),)
+
+
+def test_elimination_players_are_kept_in_rank_order() -> None:
+    t = _parse(
+        _export(
+            {"id": 7, "rank": 2, "seed": 1},
+            {"id": 8, "rank": 1, "seed": "2"},
+        )
+    )
+
+    assert [(e.rank, e.player_id, e.seed) for e in t.elimination_players] == [
+        (1, 8, 2),
+        (2, 7, 1),
+    ]
+
+
+def test_missing_elimination_players_is_an_empty_ranking() -> None:
+    assert _parse({"players": [], "rounds": []}).elimination_players == ()
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"id": 1, "seed": 1},  # no rank
+        {"id": 1, "rank": "first", "seed": 1},
+        {"id": "x", "rank": 1, "seed": 1},
+        {"id": 1, "rank": 1, "seed": True},
+        "not an object",
+    ],
+    ids=["no-rank", "bad-rank", "bad-id", "bool-seed", "not-an-object"],
+)
+def test_malformed_elimination_player_is_a_parse_error(entry: object) -> None:
+    with pytest.raises(ParseError, match="eliminationPlayers"):
+        _parse(_export(entry))

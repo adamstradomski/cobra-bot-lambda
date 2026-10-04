@@ -5,7 +5,15 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from cobra_bot.domain.models import Pairing, Player, Role, Round, Seat, Tournament
+from cobra_bot.domain.models import (
+    EliminationPlayer,
+    Pairing,
+    Player,
+    Role,
+    Round,
+    Seat,
+    Tournament,
+)
 
 FETCHED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 FETCHED_AT_TAG = "<t:1790856000:R>"
@@ -76,15 +84,18 @@ def tournament(
     name: str = "Test Cup",
     tid: int = 1,
     stale: bool = False,
+    cut_to_top: int = 0,
+    elimination_players: tuple[EliminationPlayer, ...] = (),
 ) -> Tournament:
     return Tournament(
         id=tid,
         name=name,
         date=None,
-        cut_to_top=0,
+        cut_to_top=cut_to_top,
         preliminary_rounds=len(rounds),
         players=players,
         rounds=rounds,
         fetched_at=FETCHED_AT,
         stale=stale,
+        elimination_players=elimination_players,
     )

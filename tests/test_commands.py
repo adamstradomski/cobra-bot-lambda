@@ -12,7 +12,7 @@ from cobra_bot import fonts as bundled_fonts
 from cobra_bot import messages
 from cobra_bot.cobra.cache import InMemoryCacheStore, TournamentCache, tournament_key
 from cobra_bot.cobra.client import CobraError, NotFound, Private, Unavailable
-from cobra_bot.commands import Command, Images, Reply, execute
+from cobra_bot.commands import Command, Images, Job, Reply, execute, parse_command
 from cobra_bot.domain.models import Player
 from cobra_bot.domain.rounds import name_order
 from cobra_bot.formatting.chunking import Message
@@ -114,7 +114,7 @@ def test_player() -> None:
 
     (page,) = reply.pages
     assert page.embed.description.startswith("**Players matching “layer0017”**")
-    assert page.embed.footer == "Round 8 · 1 player"
+    assert page.embed.footer == "Round 14 · 1 player"
     assert page.filename == "players-1.png"
 
 
@@ -142,12 +142,11 @@ def test_no_players_match() -> None:
 @pytest.mark.parametrize(
     ("command", "reply"),
     [
-        (Command("pairings", "4909", round=9), messages.TOP_CUT_NOT_SUPPORTED),
         (Command("pairings", "4909", round=15), messages.round_out_of_range(15, 14)),
         (Command("pairings", "5125"), messages.NOT_STARTED),
         (Command("standings", "5125"), messages.NOT_STARTED),
     ],
-    ids=["top-cut", "out-of-range", "pairings-not-started", "standings-not-started"],
+    ids=["out-of-range", "pairings-not-started", "standings-not-started"],
 )
 def test_round_state_errors(command: Command, reply: str) -> None:
     cache, _ = _setup()
@@ -208,7 +207,7 @@ def test_stale_data_is_served_with_notice(error: CobraError, notice: str) -> Non
 
     reply = _images(run(Command("standings", "4909"), cache))
 
-    assert reply.pages[0].embed.description.split("\n")[1] == notice
+    assert reply.pages[0].embed.description.split("\n")[2] == notice
 
 
 @pytest.mark.parametrize("body", [b"not json", b'{"players": [{"rank": 1}]}'])
@@ -241,7 +240,7 @@ def test_player_list_shows_every_named_player() -> None:
     reply = _images(run(Command("player", "4909", query="0017, 0042, nobody"), cache))
 
     (page,) = reply.pages
-    assert page.embed.footer == "Round 8 · 2 players"
+    assert page.embed.footer == "Round 14 · 2 players"
     assert page.embed.description.endswith("No players match “nobody”.")
 
 
@@ -309,3 +308,107 @@ def test_images_are_reused_until_the_data_changes(
     later = _cache(fetcher)  # data cache refreshed (another 60 s window)
     execute(command, later, FONTS, images)
     assert len(drawn) == 2
+
+
+# --- top cut and bracket -----------------------------------------------------------
+
+
+def test_pairings_of_a_top_cut_round() -> None:
+    cache, _ = _setup()
+
+    reply = _images(run(Command("pairings", "4909", round=9), cache))
+
+    assert reply.pages[0].embed.description.startswith(
+        "**Top cut round 1 pairings — complete**"
+    )
+
+
+def test_default_pairings_show_the_latest_round_in_the_top_cut() -> None:
+    cache, _ = _setup()
+
+    reply = _images(run(Command("pairings", "4909"), cache))
+
+    assert reply.pages[0].embed.description.startswith(
+        "**Top cut round 6 pairings — complete**"
+    )
+
+
+def test_top_cut() -> None:
+    cache, _ = _setup()
+
+    reply = _images(run(Command("top-cut", "4909"), cache))
+
+    (page,) = reply.pages
+    assert page.embed.description.startswith("**Top 8 cut — finished**")
+    assert page.filename == "top-cut-1.png"
+
+
+def test_bracket() -> None:
+    cache, _ = _setup()
+
+    reply = _images(run(Command("bracket", "4909"), cache))
+
+    (page,) = reply.pages
+    assert page.embed.description.startswith(
+        "**Top 8 bracket (double elimination) — finished**"
+    )
+    assert page.filename == "bracket-1.png"
+    assert page.png.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("name", ["top-cut", "bracket"])
+def test_no_top_cut(name: str) -> None:
+    cache, _ = _setup()
+
+    assert run(Command(name, "5018"), cache) == messages.NO_TOP_CUT  # type: ignore[arg-type]
+
+
+def test_bracket_for_a_cut_size_without_one() -> None:
+    export = json.loads(fixture_bytes("single_sided_top8"))
+    export["cutToTop"] = 6
+    export["rounds"] = export["rounds"][:8]
+    export["eliminationPlayers"] = []
+    cache = _cache(Fetcher({4909: json.dumps(export).encode()}))
+
+    assert run(Command("bracket", "4909"), cache) == messages.bracket_unavailable(6)
+
+
+def test_bracket_reuses_the_cached_image() -> None:
+    from cobra_bot.image_cache import ImageCache
+
+    cache, _ = _setup()
+    images = ImageCache(InMemoryCacheStore(), clock=lambda: FETCHED_AT)
+
+    first = _images(execute(Command("bracket", "4909"), cache, FONTS, images))
+    second = _images(execute(Command("bracket", "4909"), cache, FONTS, images))
+
+    assert (images.misses, images.hits) == (1, 1)
+    assert first.pages[0].png == second.pages[0].png
+
+
+def _interaction(name: str, **options: object) -> dict[str, object]:
+    return {
+        "data": {
+            "name": "cobra",
+            "options": [
+                {
+                    "name": name,
+                    "options": [{"name": k, "value": v} for k, v in options.items()],
+                }
+            ],
+        }
+    }
+
+
+@pytest.mark.parametrize("name", ["top-cut", "bracket"])
+def test_parse_new_subcommands(name: str) -> None:
+    command = parse_command(_interaction(name, tournament="4909", round=3))
+
+    assert command == Command(name, "4909")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("name", ["top-cut", "bracket"])
+def test_new_subcommands_survive_the_job_payload(name: str) -> None:
+    job = Job("app", "token", Command(name, "4909"))  # type: ignore[arg-type]
+
+    assert Job.from_payload(job.to_payload()) == job

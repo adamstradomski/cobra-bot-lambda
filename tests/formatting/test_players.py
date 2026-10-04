@@ -52,17 +52,13 @@ def test_player_with_bye() -> None:
     assert card.split("\n")[3:] == ["Round 1", "T2  BYE Carol"]
 
 
-def test_player_during_top_cut_shows_latest_swiss_round_and_note() -> None:
+def test_player_during_top_cut_shows_the_latest_cut_game_and_no_note() -> None:
     t = _t(ROUND_1, TOP_CUT)
     doc = format_player_cards(t, _result(ALICE), "ali")
 
-    assert doc.header == (
-        "**Players matching “ali”**",
-        "-# Top cut in progress — not supported yet",
-        f"Data from {FETCHED_AT_TAG}",
-    )
+    assert doc.header == ("**Players matching “ali”**", f"Data from {FETCHED_AT_TAG}")
     lines = plain(doc.entries[0].text).split("\n")
-    assert lines[3:5] == ["Round 1", "T1   3 Alice · Nuvem"]
+    assert lines[3:6] == ["Round 2", "G1   W Alice · Nuvem", "     L Bob · Zahya"]
 
 
 def test_player_not_paired_in_latest_round() -> None:

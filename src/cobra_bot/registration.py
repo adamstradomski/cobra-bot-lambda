@@ -60,6 +60,18 @@ def command_definition() -> Definition:
             },
             {
                 "type": SUB_COMMAND,
+                "name": "top-cut",
+                "description": messages.TOP_CUT_DESCRIPTION,
+                "options": [_tournament_option()],
+            },
+            {
+                "type": SUB_COMMAND,
+                "name": "bracket",
+                "description": messages.BRACKET_DESCRIPTION,
+                "options": [_tournament_option()],
+            },
+            {
+                "type": SUB_COMMAND,
                 "name": "player",
                 "description": messages.PLAYER_DESCRIPTION,
                 "options": [

@@ -143,3 +143,7 @@ def tournament_url(tournament_id: int) -> str:
 
 def standings_url(tournament_id: int) -> str:
     return f"{tournament_url(tournament_id)}/players/standings"
+
+
+def bracket_url(tournament_id: int) -> str:
+    return f"{tournament_url(tournament_id)}/bracket"

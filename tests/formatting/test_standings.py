@@ -47,7 +47,11 @@ def test_ac01_finished_tournament(raw_fixture: LoadRaw) -> None:
     )
     doc = format_standings(t, _view(t))
 
-    assert doc.header == ("**Standings after round 8**", f"Data from {FETCHED_AT_TAG}")
+    assert doc.header == (
+        "**Standings after round 8**",
+        "-# Top 8 cut finished — see `/cobra top-cut` and `/cobra bracket`",
+        f"Data from {FETCHED_AT_TAG}",
+    )
     assert _lines(doc.entries[0].text) == [
         " 1. Player0042      22",
         "    Nuvem        1.821",
@@ -209,6 +213,7 @@ def test_stale_private_notice() -> None:
 
     assert doc.header == (
         "**Standings after round 1**",
+        "-# No top cut on Cobra yet",
         f"Tournament is now private — data from {FETCHED_AT_TAG}",
     )
 
@@ -221,3 +226,48 @@ def test_ac26_registration_header() -> None:
     doc = format_standings(t, view)
 
     assert doc.header[0] == "**Registered players — not started yet**"
+
+
+# --- the top cut's state -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "note"),
+    [
+        ("none", "No top cut on Cobra yet"),
+        ("announced", "Top 16 cut announced — not started yet"),
+        (
+            "in_progress",
+            "Top 16 cut in progress — see `/cobra top-cut` and `/cobra bracket`",
+        ),
+        ("finished", "Top 16 cut finished — see `/cobra top-cut` and `/cobra bracket`"),
+    ],
+)
+def test_cut_note_per_status(status: str, note: str) -> None:
+    from cobra_bot import messages
+
+    assert messages.cut_note(status, 16) == note
+
+
+def test_cut_note_sits_between_the_title_and_the_data_line() -> None:
+    t = tournament(
+        (pairing(1, seat(1, "corp", 3), seat(2, "runner", 0)),),
+        players=(player(1, rank=1, points=3), player(2, rank=2)),
+        cut_to_top=2,
+    )
+
+    doc = format_standings(t, _view(t))
+
+    assert doc.header == (
+        "**Standings after round 1**",
+        "-# Top 2 cut announced — not started yet",
+        f"Data from {FETCHED_AT_TAG}",
+    )
+
+
+def test_no_cut_note_while_a_round_is_played() -> None:
+    t = tournament((pairing(1, seat(1, "corp"), seat(2, "runner")),))
+
+    doc = format_standings(t, _view(t))
+
+    assert doc.header == ("**No completed rounds yet**", f"Data from {FETCHED_AT_TAG}")

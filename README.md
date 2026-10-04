@@ -1,6 +1,6 @@
 # cobra-bot-lambda
 
-Discord bot that shows pairings and standings of [Cobra](https://tournaments.nullsignal.games/) Netrunner tournaments, running on AWS Lambda. See [`docs/requirements.md`](docs/requirements.md), [`docs/spec.md`](docs/spec.md) and [`docs/tasks.md`](docs/tasks.md).
+Discord bot that shows pairings, standings and the top cut (ranking and bracket) of [Cobra](https://tournaments.nullsignal.games/) Netrunner tournaments, running on AWS Lambda. See [`docs/requirements.md`](docs/requirements.md), [`docs/spec.md`](docs/spec.md) and [`docs/tasks.md`](docs/tasks.md).
 
 ## Development
 
@@ -113,7 +113,7 @@ Then:
 uv run scripts/register_commands.py
 ```
 
-See [`register_commands.py`](#scriptsregister_commandspy--register-the-cobra-command-with-discord-t22) for options and exit codes. Global commands can take a while to show up in Discord clients. Run it again only when the command definition changes.
+See [`register_commands.py`](#scriptsregister_commandspy--register-the-cobra-command-with-discord-t22) for options and exit codes. Global commands can take a while to show up in Discord clients. Run it again only when the command definition changes (it did on 2026-10-04: `top-cut` and `bracket` were added and descriptions changed).
 
 ### 6. Install the bot
 
@@ -299,7 +299,7 @@ The commands that regenerate the committed fixtures are kept with the local snap
 
 ### `scripts/register_commands.py` — register the `/cobra` command with Discord (T22)
 
-Overwrites the application's **global** commands with the definition in [`src/cobra_bot/registration.py`](src/cobra_bot/registration.py) (SPEC §2): `/cobra pairings`, `/cobra standings` and `/cobra player`, installable to servers and to user accounts (`integration_types: [0, 1]`), usable in servers, the bot DM and private channels (`contexts: [0, 1, 2]`). It runs in the project environment, so it uses the project's `httpx` and `cobra_bot`.
+Overwrites the application's **global** commands with the definition in [`src/cobra_bot/registration.py`](src/cobra_bot/registration.py) (SPEC §2): `/cobra pairings`, `/cobra standings`, `/cobra top-cut`, `/cobra bracket` and `/cobra player`, installable to servers and to user accounts (`integration_types: [0, 1]`), usable in servers, the bot DM and private channels (`contexts: [0, 1, 2]`). It runs in the project environment, so it uses the project's `httpx` and `cobra_bot`.
 
 ```bash
 uv run scripts/register_commands.py --dry-run
@@ -351,11 +351,13 @@ uv run scripts/aws_ops.py logs [WINDOW] [--function …] [--config-env ENV] [--s
 
 ### `scripts/preview.py` — see a reply in Discord without deploying
 
-Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings`, `standings` and `player` (a one-sentence text embed when nothing matches or for an error). `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
+Renders a `/cobra` reply from a local Cobra export and posts it to a channel on your test server, in about a second. Use it when you change the layout (`formatting/`, `messages.py`, `discord/api.py`): no `sam build`, no deploy, no Cobra request. The reply goes through the Worker's own code (`commands.execute`, the cache, the parser, the image renderer and formatters, the payload builders), so the messages are the ones the bot sends: images for `pairings`, `standings`, `top-cut`, `bracket` and `player` (a one-sentence text embed when nothing matches or for an error). `tests/scripts/test_preview.py` checks that the Worker sends the same payloads. It runs in the project environment, so it uses your working copy of `cobra_bot`.
 
 ```bash
 uv run scripts/preview.py SOURCE pairings [--round N] [OPTIONS]
 uv run scripts/preview.py SOURCE standings [OPTIONS]
+uv run scripts/preview.py SOURCE top-cut [OPTIONS]
+uv run scripts/preview.py SOURCE bracket [OPTIONS]
 uv run scripts/preview.py SOURCE player QUERY [OPTIONS]
 ```
 
@@ -364,7 +366,7 @@ Options go after the subcommand, e.g. `scripts/preview.py 5018 pairings --round 
 | Argument / option | Default | Meaning |
 |-------------------|---------|---------|
 | `SOURCE` | — | A tournament ID: the newest `snapshots/{ID}/{ts}.json` (not `*.meta.json`), written by `capture_snapshots.py`. Or a path to a Cobra export, e.g. `tests/fixtures/dss.json`. |
-| `pairings [--round N]` / `standings` / `player QUERY` | — | Same subcommands and options as `/cobra`. Without `--round`, the latest round. |
+| `pairings [--round N]` / `standings` / `top-cut` / `bracket` / `player QUERY` | — | Same subcommands and options as `/cobra`. Without `--round`, the latest round, Swiss or top cut. `top-cut` and `bracket` need an export with a cut, e.g. `tests/fixtures/single_sided_top8.json`. |
 | `--dry-run` | off | Print the JSON payloads to stdout (UTF-8) instead of posting them. Needs no webhook. Images are not printed; use `--save-images`. |
 | `--stale` | off | Render as stale data with Cobra unavailable (the cached copy is 10 minutes old). |
 | `--private` | off | Render as stale data because the tournament became private. Not with `--stale`. |

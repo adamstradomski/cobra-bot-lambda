@@ -108,7 +108,9 @@ Discord's 8 ANSI colors cannot be customized and differ between themes (light, d
 
 ## 3. Pairings
 
-Header: `**Round {n} pairings — complete|in progress**`. When Cobra reports a top cut, add `-# Top cut in progress — not supported yet` (top cut rendering is out of scope). One empty line between tables.
+Header: `**Round {n} pairings — complete|in progress**`; for a top-cut round `**Top cut round {k} pairings — complete|in progress**` (2026-10-04). One empty line between tables.
+
+A top-cut game is single-sided: label `G{n}` (the game number) instead of `T{n}`, and `W` / `L` instead of points (`W` bold, `L` secondary, `–` for both while unreported).
 
 | ID | Priority | Requirement |
 |----|----------|-------------|
@@ -157,7 +159,7 @@ T1   3 Kris_Casual
 
 Not covered by the design fixtures; derived from §2 and §3 so the same rules (C-5 width, C-6, palette) hold.
 
-- A card is the player's standings unit (§2), a secondary `Round {n}` line and the player's table in the latest Swiss round in the §3 form (including a bye), or `Round {n}: not paired`. Cards are separated by an empty line.
+- A card is the player's standings unit (§2), a secondary `Round {n}` line and the player's table in the latest round, Swiss or top cut, in the §3 form (including a bye), or `Round {n}: not paired`. Cards are separated by an empty line.
 - Footer: `Corp + SoS on line 2, Runner on line 3 · pairing: Corp first · number = points scored`.
 
 ## 5. Acceptance criteria (tests)
@@ -187,7 +189,7 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 | ID | Priority | Requirement |
 |----|----------|-------------|
 | I-1 | MUST | Standings, pairings and player search (when someone matches) show their table as a PNG attached to the message and shown in the embed (`image.url = attachment://{name}-{n}.png`). One image per message. |
-| I-2 | MUST | The embed keeps C-1 to C-3: the first page's embed has the title, the Cobra link and the header (status line, top-cut note, `Data from <t:…:R>` or the stale notice). Later pages' embeds have no title or description. All pages go in one message (one embed and attachment per page, at most 10 by Discord's limits). |
+| I-2 | MUST | The embed keeps C-1 to C-3: the first page's embed has the title, the Cobra link and the header (status line, the standings' top-cut note, `Data from <t:…:R>` or the stale notice). Later pages' embeds have no title or description. All pages go in one message (one embed and attachment per page, at most 10 by Discord's limits). |
 | I-3 | MUST | Every embed has a legend in the footer: `Round 8 · 46 players` / `Round 8 · 23 tables`, plus `N / M` when there are several pages. Column headings in the image make a key unnecessary. |
 | I-4 | MUST | Columns with headings. Standings: `#`, Player, Corp, Runner, Pts, SoS — IDs before points and SoS. Single-sided pairings: Table, Player, Side, ID, Pts, two rows per table, the Corp first. Double-sided: Table, Player, Game 1 (`C`/`R` tag + ID, points), Game 2, Total; seat 1 (the Corp in game 1) first. Bye: `BYE` in the third column. |
 | I-5 | MUST | Colours on Discord's dark theme background `#2b2d31`: text `#dbdee1`, secondary `#949ba4` (SoS, losers, unknown ID `—`, headings), points `#f0b232`, Corp `#7998ec`, Runner `#dd4847`. Corp and Runner follow NSG's card backs (blue and red); the navy is lightened to be readable. |
@@ -197,5 +199,16 @@ Not covered by the design fixtures; derived from §2 and §3 so the same rules (
 | I-9 | MUST | At most 60 rows per image (raised from 40 so the 145 tables of World Championship 2026, 290 rows, fit in 5 pages). Standings fill every page (a points group may continue on the next one); a table is never split. At most 5 pages; past them, the last description ends with `…and N more — [full list on Cobra](url)`, N counting players or tables. |
 | I-10 | MUST | Text in the bundled Noto Sans Regular/Bold (SIL OFL, `src/cobra_bot/fonts/`): Lambda has no system fonts, and Pillow's built-in font lacks Latin Extended letters (`Żółw`). Drawn at twice the display size so text stays sharp when Discord scales it. |
 | I-11 | MUST | InteractionsFunction never imports Pillow (it must answer within 3 s); only the Worker draws images (`tests/handlers/test_import_cost.py`). |
-| I-13 | MUST | Player search: one row per player found, rank order: `#`, Player, Corp, Runner, Pts, SoS, then the latest Swiss round's table (`T6`, heading `Round N`), the side played (`Corp`/`Runner` in its colour; double-sided `C 3 · R 0`, secondary), the opponent, and the score from the player's side (`3 – 0`; bold won, secondary lost; `–`, `ID`, `BYE`, `not paired`). Before any round, only the standings columns. |
+| I-13 | MUST | Player search: one row per player found, rank order: `#`, Player, Corp, Runner, Pts, SoS, then the latest round's table (`T6`, a top-cut game `G13`; heading `Round N`), the side played (`Corp`/`Runner` in its colour; double-sided `C 3 · R 0`, secondary), the opponent, and the score from the player's side (`3 – 0`; bold won, secondary lost; `–`, `ID`, `BYE`, `not paired`; a top-cut game `W` / `L`). Before any round, only the standings columns. |
 | I-12 | SHOULD | Text in an image cannot be selected or searched; the Cobra link in the title gives the selectable version. |
+
+## 8. Top cut (`/cobra top-cut`, `/cobra bracket`, 2026-10-04)
+
+| ID | Priority | Requirement |
+|----|----------|-------------|
+| TC-1 | MUST | Standings note, subtext under the header, once Swiss is over (SPEC §5): `No top cut on Cobra yet`, `Top {n} cut announced — not started yet`, `Top {n} cut in progress — see `/cobra top-cut` and `/cobra bracket``, `Top {n} cut finished — see …`. |
+| TC-2 | MUST | Top-cut pairings (images): columns Game, Player, Side, ID, W/L; two rows per game, the Corp first; the winner bold with `W`, the loser secondary with `L`; `–` while unreported. Legend `Round {n} · {k} games`. |
+| TC-3 | MUST | `/cobra top-cut`: an image like standings (I-1 to I-10): `#` (blank while Cobra has not decided the place), Player, Corp, Runner, `W–L` (games won and lost in the cut), Seed. Players still in bold with a bold W–L, players out secondary. Header `**Top {n} cut — announced — not started yet|in progress|finished**`; legend `Top {n} · {k} players · W–L = games won and lost`; title link: the standings page. |
+| TC-4 | MUST | `/cobra bracket`: one image laid out like Cobra's bracket page: a column per bracket round; double elimination `Upper bracket` above `Lower bracket` (labels secondary bold), single elimination one unlabelled section. Each game a rounded box (background `#313338`, outline `#3f4147`) with its number left of it; a line from each game to the game its winner plays next in the same section. The first column is evenly spaced; a later game is centred between the games feeding it. |
+| TC-5 | MUST | A bracket slot: the player's name (cut at 18 characters with `…`, made safe as C-7) and, once paired, the short ID of the side played in its colour, right-aligned. Winner bold, loser secondary, unreported plain. An unknown player: `Seed {n}`, `Winner of {g}`, `Loser of {g}` or `TBD` (single elimination, decided when paired), secondary. No faction logos, no pronouns. |
+| TC-6 | MUST | Bracket header `**Top {n} bracket (double|single elimination) — {state}**`; legend `{k} games · bold = winner`; title link: Cobra's bracket page. The second final of double elimination appears only once Cobra pairs it. |

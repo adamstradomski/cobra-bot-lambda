@@ -11,11 +11,15 @@ TOURNAMENT_NOT_FOUND = "Tournament not found."
 TOURNAMENT_PRIVATE = "This tournament is private."
 COBRA_UNAVAILABLE = "Cobra is unavailable, try again later."
 NOT_STARTED = "Tournament has not started yet."
-TOP_CUT_NOT_SUPPORTED = "Top cut is not supported yet."
+NO_TOP_CUT = "This tournament has no top cut on Cobra yet."
 NO_PLAYERS_MATCH = "No players match."
 UNKNOWN_COMMAND = "Unknown command."
 INTERNAL_ERROR = "Something went wrong. Please try again later."
 COBRA_DATA_UNREADABLE = "Cobra returned data the bot cannot read."
+
+
+def bracket_unavailable(size: int) -> str:
+    return f"There is no bracket for a top {size} cut."
 
 
 def round_out_of_range(requested: int, last_round: int) -> str:
@@ -26,7 +30,6 @@ def round_out_of_range(requested: int, last_round: int) -> str:
 
 # --- headers and notes (SPEC §9) -------------------------------------------------
 
-TOP_CUT_IN_PROGRESS = "Top cut in progress — not supported yet"
 NO_COMPLETED_ROUNDS = "No completed rounds yet"
 REGISTERED_PLAYERS = "Registered players — not started yet"
 IN_PROGRESS = "in progress"
@@ -38,8 +41,40 @@ def pairings_header(round_number: int, complete: bool) -> str:
     return f"Round {round_number} pairings — {state}"
 
 
+def cut_pairings_header(cut_round: int, complete: bool) -> str:
+    state = COMPLETE if complete else IN_PROGRESS
+    return f"Top cut round {cut_round} pairings — {state}"
+
+
 def standings_header(after_round: int) -> str:
     return f"Standings after round {after_round}"
+
+
+# The top cut's state (domain.bracket.CutStatus).
+CUT_STATES = {
+    "announced": "announced — not started yet",
+    "in_progress": "in progress",
+    "finished": "finished",
+}
+SEE_TOP_CUT = "see `/cobra top-cut` and `/cobra bracket`"
+NO_TOP_CUT_YET = "No top cut on Cobra yet"
+
+
+def cut_note(status: str, size: int) -> str:
+    """The top cut's state under the standings once Swiss is over."""
+    if status == "none":
+        return NO_TOP_CUT_YET
+    note = f"Top {size} cut {CUT_STATES[status]}"
+    return note if status == "announced" else f"{note} — {SEE_TOP_CUT}"
+
+
+def top_cut_header(size: int, status: str) -> str:
+    return f"Top {size} cut — {CUT_STATES[status]}"
+
+
+def bracket_header(size: int, double: bool, status: str) -> str:
+    kind = "double elimination" if double else "single elimination"
+    return f"Top {size} bracket ({kind}) — {CUT_STATES[status]}"
 
 
 def players_header(query: str) -> str:
@@ -93,6 +128,8 @@ def omitted_entries(count: int, url: str) -> str:
 # --- entry vocabulary -----------------------------------------------------------
 
 BYE = "BYE"
+WIN = "W"  # a top-cut game's result
+LOSS = "L"
 INTENTIONAL_DRAW = "ID"
 NO_RESULT = "–"  # points not reported yet
 CORP_TAG = "C"  # the side of a double-sided game
@@ -146,6 +183,10 @@ IDENTITY = "ID"
 POINTS = "Pts"
 SOS = "SoS"
 TOTAL = "Total"
+GAME = "Game"
+RESULT = "W/L"
+SEED = "Seed"
+RECORD = "W–L"
 OPPONENT = "Opponent"
 SCORE = "Score"
 NOT_PAIRED = "not paired"
@@ -171,6 +212,40 @@ def compact_pairings_footer(round_number: int, tables: int) -> str:
     return f"Round {round_number} · {_count(tables, 'table')}"
 
 
+def compact_cut_pairings_footer(round_number: int, games: int) -> str:
+    return f"Round {round_number} · {_count(games, 'game')}"
+
+
+def compact_top_cut_footer(size: int, players: int) -> str:
+    return f"Top {size} · {_count(players, 'player')} · W–L = games won and lost"
+
+
+def compact_bracket_footer(games: int) -> str:
+    return f"{_count(games, 'game')} · bold = winner"
+
+
+def record(wins: int, losses: int) -> str:
+    return f"{wins}–{losses}"
+
+
+# Bracket slots whose player is not known yet.
+UPPER_BRACKET = "Upper bracket"
+LOWER_BRACKET = "Lower bracket"
+TBD = "TBD"
+
+
+def seed_slot(seed: int) -> str:
+    return f"Seed {seed}"
+
+
+def winner_of(game: int) -> str:
+    return f"Winner of {game}"
+
+
+def loser_of(game: int) -> str:
+    return f"Loser of {game}"
+
+
 def compact_players_footer(round_number: int | None, players: int) -> str:
     parts = [f"Round {round_number}"] if round_number else []
     return " · ".join([*parts, _count(players, "player")])
@@ -179,9 +254,11 @@ def compact_players_footer(round_number: int | None, players: int) -> str:
 # --- command registration (SPEC §2) --------------------------------------------
 
 COMMAND_DESCRIPTION = "Pairings and standings from Cobra tournaments"
-PAIRINGS_DESCRIPTION = "Show pairings for a Swiss round"
-STANDINGS_DESCRIPTION = "Show the current standings"
+PAIRINGS_DESCRIPTION = "Show pairings for a round, Swiss or top cut"
+STANDINGS_DESCRIPTION = "Show the Swiss standings"
+TOP_CUT_DESCRIPTION = "Show the top-cut ranking"
+BRACKET_DESCRIPTION = "Show the top-cut bracket"
 PLAYER_DESCRIPTION = "Find players and their latest pairing"
 TOURNAMENT_OPTION_DESCRIPTION = "Cobra tournament ID, link or shortcode"
-ROUND_OPTION_DESCRIPTION = "Swiss round number (default: the latest)"
+ROUND_OPTION_DESCRIPTION = "Round number, Swiss or top cut (default: the latest)"
 QUERY_OPTION_DESCRIPTION = "Part of a player's name; several, separated by commas"

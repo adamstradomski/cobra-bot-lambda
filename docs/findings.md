@@ -102,6 +102,18 @@ User-facing handling of 401 is decided in FR-21, SPEC §7 and AC-25: serve the c
   - `Cache-Control: max-age=0, private, must-revalidate`.
   - The weak `ETag` equals the first 32 hex characters of the body's SHA-256, so it is a pure function of the body. `If-None-Match` revalidation (304) might lower the cost of refreshing the cache. Untested.
 
+## Top cut — from Cobra's source code (2026-10-04)
+
+Read from Null-Signal-Games/cobra (`app/services/nrtm_json.rb`, `app/services/bracket/*.rb`) before a live cut could be captured. Still to confirm against live snapshots.
+
+- **`winner` while unreported:** `null` (`score > opp_score if score && opp_score`); `true` / `false` once both scores are in.
+- **`eliminationPlayers` during the cut:** one entry per place (`rank` 1..N); a place not decided yet has `id`, `name` and `seed` `null`. Cobra fills a group of places together (e.g. 13th–16th once games 9–12 are all reported); 1st and 2nd come with the final. The anonymiser keeps these nulls.
+- **`cutToTop`:** the number of players in the cut stage, 0 until the organiser makes the cut. So "cut made, no game paired" is `cutToTop > 0` with no elimination round.
+- **Rounds:** each cut round in `rounds` is one bracket round (Cobra pairs a bracket round at once, `Bracket::Base#pair`), and `table` is the game number. Upper and lower bracket games share a round (round 4 of a top 16: games 23, 24, 27).
+- **Brackets:** double elimination top 4/8/16 (with a second final, game 7/15/31, only when the lower bracket's player wins the first), single elimination top 2/3/4/8/16. The export has no format field; the bot tells them apart by which games each round holds and, in round 1, by the seeds.
+- **Seeds:** the Swiss ranks of the cut players in every fixture (`eliminationPlayers[].seed` equals `players[].rank`), and in round 1 `player1` holds the template's first slot (game 1: seed 1 against seed 16).
+- **Separate endpoint:** Cobra's bracket page loads `/tournaments/{id}/rounds/brackets` (format, `winner_game`, `loser_game`, `bracket_type` per game; 937 KB for 4990). The bot does not use it: one Cobra request and one cache entry per tournament stay as they are.
+
 ## Still to capture
 
 - [ ] Live top cut (World Championship 2026, day 2): cut start, an elimination round in progress. Run `uv run scripts/capture_snapshots.py <id> --interval 120`, using 5132 or the ID of a separate cut tournament if the organisers create one.

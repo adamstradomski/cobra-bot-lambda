@@ -121,6 +121,24 @@ def test_player_ids_are_remapped_consistently(anonymizer: ModuleType) -> None:
     assert _ids(fixture) == [mapping[i] for i in _ids(raw)]
 
 
+def test_undecided_cut_place_stays_null(anonymizer: ModuleType) -> None:
+    """A live cut: Cobra exports places not decided yet with null player."""
+    raw = _raw()
+    raw["eliminationPlayers"][0] = {"id": None, "name": None, "rank": 1, "seed": None}
+
+    fixture = anonymizer.anonymize(raw)
+
+    assert fixture["eliminationPlayers"][0] == raw["eliminationPlayers"][0]
+
+
+def test_cut_place_with_a_name_but_no_id_is_refused(anonymizer: ModuleType) -> None:
+    raw = _raw()
+    raw["eliminationPlayers"][0]["id"] = None
+
+    with pytest.raises(anonymizer.AnonymizeError, match="a name without an id"):
+        anonymizer.anonymize(raw)
+
+
 def test_bye_in_player1_slot_stays_null(anonymizer: ModuleType) -> None:
     fixture = anonymizer.anonymize(_raw())
 

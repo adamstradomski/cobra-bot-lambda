@@ -70,6 +70,16 @@ type Round = tuple[Pairing, ...]
 
 
 @dataclass(frozen=True)
+class EliminationPlayer:
+    """A place in Cobra's top-cut ranking (`eliminationPlayers`). While the cut
+    is played, places not decided yet have no player (`player_id` None)."""
+
+    rank: int
+    player_id: int | None
+    seed: int | None
+
+
+@dataclass(frozen=True)
 class Tournament:
     id: int
     name: str
@@ -80,6 +90,7 @@ class Tournament:
     rounds: tuple[Round, ...]  # index 0 = round 1
     fetched_at: datetime
     stale: bool  # served from cache after a failed fetch
+    elimination_players: tuple[EliminationPlayer, ...] = ()  # in rank order
 
     def player(self, player_id: int) -> Player | None:
         return next((p for p in self.players if p.id == player_id), None)

@@ -10,6 +10,7 @@ from builders import FETCHED_AT, pairing, player, seat, tournament
 from cobra_bot import fonts as bundled_fonts
 from cobra_bot import messages
 from cobra_bot.cobra.parser import parse_tournament
+from cobra_bot.domain.bracket import CutEntry, TopCutView
 from cobra_bot.domain.models import Tournament
 from cobra_bot.domain.rounds import (
     PairingsView,
@@ -372,7 +373,9 @@ def test_standings_image_message(fonts: Fonts) -> None:
     assert page.embed.url is not None
     assert page.embed.url.endswith("/tournaments/4909/players/standings")
     assert page.embed.description == (
-        "**Standings after round 1**\nData from <t:1790856000:R>"
+        "**Standings after round 1**\n"
+        "-# No top cut on Cobra yet\n"
+        "Data from <t:1790856000:R>"
     )
     assert page.embed.footer == "Round 1 · 2 players"  # no page number
     assert page.embed.color == EMBED_COLOR
@@ -454,7 +457,7 @@ def test_one_page_header_and_omission_together(
 
     (page,) = c.standings_images(t, _standings(t), fonts)
 
-    header, _, note = page.embed.description.split("\n")
+    header, _, _, note = page.embed.description.split("\n")
     assert header == "**Standings after round 1**"
     assert note.startswith("…and 1 more — ")
 
@@ -678,7 +681,7 @@ def test_player_row_bye_and_not_paired() -> None:
     assert _player_row(t, 2)[6:] == ["—", "", "not paired", ""]
 
 
-def test_player_row_uses_the_latest_swiss_round_during_top_cut(
+def test_player_row_uses_the_latest_round_during_top_cut(
     raw_fixture: LoadRaw,
 ) -> None:
     t = parse_tournament(
@@ -687,7 +690,7 @@ def test_player_row_uses_the_latest_swiss_round_during_top_cut(
 
     table = c.players_table(t, [t.players[0]])
 
-    assert table.columns[6].heading == "Round 8"
+    assert table.columns[6].heading == "Round 14"
 
 
 def test_player_images_message(fonts: Fonts) -> None:
@@ -767,3 +770,145 @@ def test_draw_replaces_render_png(fonts: Fonts) -> None:
 
     assert page.png == b"cached"
     assert seen == [c.standings_table(_standings(t))]
+
+
+# --- top cut ------------------------------------------------------------------------
+
+
+def _cut_game(winner: int | None) -> Tournament:
+    """One cut game: Alice (Corp) against Bob (Runner)."""
+    return tournament(
+        (
+            pairing(
+                7,
+                seat(1, "corp", winner=None if winner is None else winner == 1),
+                seat(2, "runner", winner=None if winner is None else winner == 2),
+                elimination=True,
+            ),
+        ),
+        players=PLAYERS,
+    )
+
+
+def test_cut_pairings_columns_name_the_game_and_the_result() -> None:
+    table = c.pairings_table(_cut_game(2), _pairings(_cut_game(2)))
+
+    assert [col.heading for col in table.columns] == [
+        "Game",
+        "Player",
+        "Side",
+        "ID",
+        "W/L",
+    ]
+
+
+def test_cut_game_winner_bold_with_w_loser_secondary_with_l() -> None:
+    t = _cut_game(2)
+    ((corp, runner),) = c.pairings_table(t, _pairings(t)).groups
+
+    assert [cell.text for cell in corp] == ["G7", "Alice", "Corp", "Nuvem", "L"]
+    assert (corp[1].color, corp[1].bold) == (c.SECONDARY, False)
+    assert [cell.text for cell in runner] == ["", "Bob", "Runner", "Zahya", "W"]
+    assert (runner[1].color, runner[1].bold) == (c.TEXT, True)
+
+
+def test_unreported_cut_game_shows_dashes_and_plain_names() -> None:
+    t = _cut_game(None)
+    ((corp, runner),) = c.pairings_table(t, _pairings(t)).groups
+
+    assert (corp[4].text, runner[4].text) == ("–", "–")
+    assert not corp[1].bold and not runner[1].bold
+
+
+def test_player_row_in_a_cut_game_shows_w_or_l() -> None:
+    t = _cut_game(2)
+
+    rows = _texts(c.players_table(t, list(PLAYERS)))
+
+    assert rows[0][6:] == ["G7", "Corp", "Bob", "L"]
+    assert rows[1][6:] == ["G7", "Runner", "Alice", "W"]
+
+
+def test_player_row_in_an_unreported_cut_game() -> None:
+    t = _cut_game(None)
+
+    assert _texts(c.players_table(t, list(PLAYERS)))[0][9] == "–"
+
+
+def _entry(rank: int | None, pid: int, *, out: bool, seed: int | None = 1) -> CutEntry:
+    p = PLAYERS[pid - 1]
+    return CutEntry(rank, pid, p, seed, 2, 1 if not out else 2, out)
+
+
+def test_top_cut_table_columns() -> None:
+    view = TopCutView(2, "in_progress", (_entry(None, 1, out=False),))
+
+    assert [col.heading for col in c.top_cut_table(view).columns] == [
+        "#",
+        "Player",
+        "Corp",
+        "Runner",
+        "W–L",
+        "Seed",
+    ]
+
+
+def test_top_cut_rows_still_in_bold_out_secondary_undecided_rank_blank() -> None:
+    view = TopCutView(
+        2,
+        "in_progress",
+        (_entry(None, 1, out=False, seed=2), _entry(2, 2, out=True, seed=None)),
+    )
+
+    first, second = (row for group in c.top_cut_table(view).groups for row in group)
+
+    assert [cell.text for cell in first] == ["", "Alice", "Nuvem", "—", "2–1", "2"]
+    assert (first[1].bold, first[4].bold) == (True, True)
+    assert [cell.text for cell in second] == ["2", "Bob", "—", "Zahya", "2–2", ""]
+    assert (second[1].color, second[4].bold) == (c.SECONDARY, False)
+
+
+def test_top_cut_row_without_a_swiss_record() -> None:
+    view = TopCutView(1, "finished", (CutEntry(1, 9, None, 1, 3, 0, False),))
+
+    (row,) = (r for group in c.top_cut_table(view).groups for r in group)
+
+    assert [cell.text for cell in row][:4] == ["1", "Unknown player", "—", "—"]
+
+
+def test_top_cut_images_message(raw_fixture: LoadRaw, fonts: Fonts) -> None:
+    from cobra_bot.domain.bracket import top_cut_view
+
+    t = parse_tournament(
+        raw_fixture("single_sided_top8"), tournament_id=4909, fetched_at=FETCHED_AT
+    )
+    view = top_cut_view(t)
+    assert isinstance(view, TopCutView)
+
+    (page,) = c.top_cut_images(t, view, fonts)
+
+    assert page.filename == "top-cut-1.png"
+    assert page.png.startswith(b"\x89PNG")
+    assert page.embed.description == (
+        "**Top 8 cut — finished**\nData from <t:1790856000:R>"
+    )
+    assert page.embed.footer == "Top 8 · 8 players · W–L = games won and lost"
+    assert page.embed.url is not None
+    assert page.embed.url.endswith("/tournaments/4909/players/standings")
+
+
+def test_cut_pairings_image_footer_counts_games(
+    raw_fixture: LoadRaw, fonts: Fonts
+) -> None:
+    t = parse_tournament(
+        raw_fixture("single_sided_top8"), tournament_id=4909, fetched_at=FETCHED_AT
+    )
+    from cobra_bot.domain.rounds import pairings_view
+
+    view = pairings_view(t, 9)
+    assert isinstance(view, PairingsView)
+
+    (page,) = c.pairings_images(t, view, fonts)
+
+    assert page.embed.footer == "Round 9 · 4 games"
+    assert page.embed.description.startswith("**Top cut round 1 pairings — complete**")
