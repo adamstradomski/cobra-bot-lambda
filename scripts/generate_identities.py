@@ -77,6 +77,10 @@ OVERRIDES: dict[Side, dict[str, str]] = {
         # Not the first word
         "Captain Padma Isbister": "Padma",
         "Virtual Intelligence, P.I.": "Vic",
+        # What players call them, not the derived name
+        'Kate "Mac" McCaffrey': "Kate",
+        'Ken "Express" Tenma': "Ken Tenma",
+        "Laramy Fisk": "Fisk",
         # Longer than 9 columns
         "Silhouette": "Silhouet.",
     },
