@@ -338,7 +338,84 @@ def test_paginate_split_fills_every_page() -> None:
 @pytest.mark.parametrize("split", [True, False])
 def test_paginate_splits_a_group_longer_than_a_page(split: bool) -> None:
     assert _sizes(c.paginate_groups(_groups(1, 6), 4, split=split)) == (
-        [[1, 3], [3]] if split else [[1], [4], [2]]
+        [[1, 3], [3]] if split else [[1], [3], [3]]
+    )
+
+
+def _rows(pages: list[tuple[tuple[tuple[Cell, ...], ...], ...]]) -> list[int]:
+    return [sum(len(g) for g in page) for page in pages]
+
+
+@pytest.mark.parametrize(
+    ("players", "rows"),
+    [(70, [35, 35]), (100, [50, 50]), (120, [60, 60]), (125, [42, 42, 41])],
+)
+def test_paginate_spreads_rows_evenly(players: int, rows: list[int]) -> None:
+    """Images of equal height show their text at the same size in Discord."""
+    groups = _groups(*[1] * players)
+
+    assert _rows(c.paginate_groups(groups, 60, split=True)) == rows
+
+
+def test_paginate_spreads_whole_tables_evenly() -> None:
+    """35 pairings tables (70 rows): 18 and 17 tables, not 30 and 5."""
+    pages = c.paginate_groups(_groups(*[2] * 35), 60, split=False)
+
+    assert [len(page) for page in pages] == [18, 17]
+
+
+@pytest.mark.parametrize(
+    ("players", "rows"),
+    [(61, [32, 29]), (63, [32, 31]), (64, [32, 32]), (66, [33, 33])],
+)
+def test_paginate_keeps_the_top_32_on_the_first_page(
+    players: int, rows: list[int]
+) -> None:
+    """Even pages of 31 rows would split the top 32: the first page grows to 32;
+    from 33 rows a page the top 32 fit anyway."""
+    groups = _groups(*[1] * players)
+
+    assert _rows(c.paginate_groups(groups, 60, split=True)) == rows
+
+
+def test_paginate_keeps_the_top_32_tables_rows_on_the_first_page() -> None:
+    """31 tables (62 rows): 16 tables (32 players) first, not 15 and 16."""
+    pages = c.paginate_groups(_groups(*[2] * 31), 60, split=False)
+
+    assert [len(page) for page in pages] == [16, 15]
+
+
+@pytest.mark.parametrize(
+    ("players", "max_rows", "rows"),
+    [(13, 10, [8, 5]), (21, 20, [16, 5]), (17, 10, [10, 7])],
+)
+def test_paginate_keeps_the_top_8_or_16_on_the_first_page(
+    players: int, max_rows: int, rows: list[int]
+) -> None:
+    """The first page grows to the next cut size, but never past `max_rows`
+    (17 rows on pages of 10: the top 16 cannot fit)."""
+    groups = _groups(*[1] * players)
+
+    assert _rows(c.paginate_groups(groups, max_rows, split=True)) == rows
+
+
+def test_paginate_one_page_is_not_grown() -> None:
+    assert _rows(c.paginate_groups(_groups(*[1] * 20), 60, split=True)) == [20]
+
+
+@pytest.mark.parametrize(
+    ("max_pages", "rows"),
+    [(1, [60, 10]), (2, [35, 35]), (3, [35, 35])],
+)
+def test_paginate_past_max_pages_fills_every_page(
+    max_pages: int, rows: list[int]
+) -> None:
+    """Pages past `max_pages` are not sent, so they stay full (spreading would
+    drop more rows); at or under `max_pages` the rows are spread."""
+    groups = _groups(*[1] * 70)
+
+    assert _rows(c.paginate_groups(groups, 60, split=True, max_pages=max_pages)) == (
+        rows
     )
 
 
@@ -437,6 +514,19 @@ def test_at_most_five_messages_and_the_rest_counted(
         )
     else:
         assert "more" not in last
+
+
+def test_pages_past_five_messages_stay_full(
+    fonts: Fonts, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """51 players on pages of 10 need 6 pages: 5 full ones leave 1 out, where
+    spread pages of 9 would leave 6 out."""
+    monkeypatch.setattr(c, "MAX_ROWS", 10)
+    t = _standings_cup(51)
+
+    pages = c.standings_images(t, _standings(t), fonts)
+
+    assert pages[-1].embed.description.startswith("…and 1 more — ")
 
 
 def test_pairings_count_omitted_tables_not_rows(

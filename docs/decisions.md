@@ -4,6 +4,7 @@ Why the bot is built the way it is, newest first. The current rules are in `docs
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-10-04 | Image rows are spread evenly over the pages; the first page holds at least the next of 8, 16 or 32 rows. | Discord scales images of different heights differently, so a short last page showed bigger text; the top cut stays on one image. |
 | 2026-10-04 | Requirements are traced by `@pytest.mark.req` markers and `tests/test_traceability.py`, not a Tests column. | The column had to be edited by hand on every change and drifted. |
 | 2026-10-04 | The code-block (ANSI) reply format is removed; every table is an image. | Since the images, the code-block formatters only supplied header lines, yet cost code, golden files and documentation. |
 | 2026-10-04 | Top cut: pairings of elimination rounds, `/cobra top-cut` and `/cobra bracket`, with Cobra's bracket templates copied from its source. Default `pairings` shows the latest round, Swiss or top cut. | The MVP replied "Top cut is not supported yet"; the export has no bracket format, so the templates are matched against the paired games. Cobra's separate bracket endpoint (937 KB for 235 players) is not used: one fetch per reply. |

@@ -19,6 +19,7 @@ Code: `formatting/image.py` (tables, pages), `formatting/bracket_image.py`, `for
 ## Pages
 
 - At most 60 rows per image (145 tables = 290 rows fit in 5 pages); at most 5 pages, all in one message (Discord allows 10 embeds and attachments per message).
+- Rows are spread evenly over as few pages as needed, so the images are about the same height and Discord shows their text at the same size; the first page grows to the next of 8, 16 or 32 rows so the top 8/16/32 stay on one image. Past 5 pages every page is full.
 - Standings, top cut and player rows fill every page (a points group may continue on the next one); a pairing is never split.
 - Past 5 pages the rest is dropped and the last description ends with "…and N more — [full list on Cobra](url)", N counting players or tables.
 - Text in an image cannot be selected; the Cobra link gives the selectable version.

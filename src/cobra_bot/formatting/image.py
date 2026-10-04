@@ -3,9 +3,9 @@
 
 Full colours on every client and real columns with headings. The text cannot be
 selected or searched. The embed holds the title link and header lines
-(`formatting.header`) and a short legend; a long table is split into pages of
-at most `MAX_ROWS` rows, at most `MAX_PAGES`, an embed each, all sent in one
-message.
+(`formatting.header`) and a short legend; a long table is split evenly into
+pages of at most `MAX_ROWS` rows, at most `MAX_PAGES`, an embed each, all sent
+in one message.
 
 Drawing is in memory and the fonts are injected (`cobra_bot.fonts.load`), so
 this module touches no files.
@@ -34,6 +34,7 @@ from cobra_bot.formatting.text import code_text, corp_label, fit, runner_label
 # `table_key` do not show, so cached images are not reused (image_cache.py).
 RENDER_VERSION = 1
 MAX_ROWS = 60  # per image: 145 Worlds tables (290 rows) fit in 5 pages
+CUT_SIZES = (8, 16, 32)  # rows the first of several pages holds at least
 NAME_CHARS = 28
 
 # Discord's dark theme.
@@ -608,20 +609,47 @@ def player_images(
 
 
 def paginate_groups(
-    groups: Sequence[Group], max_rows: int, *, split: bool
+    groups: Sequence[Group],
+    max_rows: int,
+    *,
+    split: bool,
+    max_pages: int | None = None,
 ) -> list[tuple[Group, ...]]:
     """Pages of at most `max_rows` rows; always at least one page.
 
-    With `split`, every page is filled and a group may continue on the next
-    page (standings: a group is the players on equal points). Without it, a
-    group moves whole to the next page unless it alone is longer than a page
-    (pairings: a group is a table)."""
+    As few pages as full pages need, with the rows spread evenly over them, so
+    the images are about the same size and Discord shows their text at the same
+    size; the first page is then grown to the next of `CUT_SIZES` (the top 8,
+    16 or 32 stay on one image). With more pages than `max_pages` every page is
+    full instead: the pages past it are not sent.
+
+    With `split`, a group may continue on the next page (standings: a group is
+    the players on equal points). Without it, a group moves whole to the next
+    page unless it alone is longer than the page (pairings: a group is a
+    table)."""
+    full = _fill(groups, max_rows, max_rows, split=split)
+    if len(full) == 1 or (max_pages is not None and len(full) > max_pages):
+        return full
+    total = sum(len(group) for group in groups)
+    for limit in range(-(-total // len(full)), max_rows):
+        first = min(max_rows, next((n for n in CUT_SIZES if n >= limit), limit))
+        pages = _fill(groups, first, limit, split=split)
+        if len(pages) <= len(full):
+            return pages
+    return full
+
+
+def _fill(
+    groups: Sequence[Group], first: int, limit: int, *, split: bool
+) -> list[tuple[Group, ...]]:
+    """Pages filled in order: at most `first` rows on the first page, `limit`
+    on the others."""
     pages: list[list[Group]] = [[]]
     rows = 0
     for group in groups:
         rest = group
         while rest:
-            room = max_rows - rows
+            room = (first if len(pages) == 1 else limit) - rows
             if not split and len(rest) > room and pages[-1]:
                 room = 0
             if room == 0:
@@ -650,7 +678,9 @@ def image_pages(
     many entries are missing, with the Cobra link (FR-14). An entry is a row
     with `row_entries` (a player; groups may then break across pages), else a
     group (a table, kept whole). `draw` replaces `render_png` (image cache)."""
-    pages = paginate_groups(table.groups, MAX_ROWS, split=row_entries)
+    pages = paginate_groups(
+        table.groups, MAX_ROWS, split=row_entries, max_pages=MAX_PAGES
+    )
     kept = pages[:MAX_PAGES]
     omitted = sum(
         sum(len(g) for g in page) if row_entries else len(page)
