@@ -242,3 +242,17 @@ def test_one_name_keeps_the_single_name_notes() -> None:
     result = NamesResult(matches=(), names=(NameResult("zed", 0, 0),), skipped=0)
 
     assert header.players(_t(), result, "zed").notes == ("No players match.",)
+
+
+# --- title --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("length", "shown"),
+    [(255, "A" * 255), (256, "A" * 256), (257, "A" * 255 + "…")],
+)
+def test_title_is_cut_to_discords_256_characters(length: int, shown: str) -> None:
+    t = tournament(ROUND_1, players=(ALICE, BOB), name="A" * length)
+
+    assert header.title(t) == shown
+    assert header.players(t, _result(), "x").title == shown

@@ -9,11 +9,14 @@ from cobra_bot.domain.models import Tournament
 from cobra_bot.domain.rounds import PairingsView, StandingsView
 from cobra_bot.domain.search import MAX_NAMES, NamesResult
 from cobra_bot.formatting.text import (
+    ELLIPSIS,
     discord_timestamp,
     escape_markdown,
     standings_url,
     tournament_url,
 )
+
+TITLE_CHARS = 256  # Discord rejects a longer embed title
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,13 @@ class Header:
     url: str  # title link, and the "full list on Cobra" link when pages are cut
     lines: tuple[str, ...]  # markdown lines above the image
     notes: tuple[str, ...] = ()  # markdown lines below the header
+
+
+def title(t: Tournament) -> str:
+    """The tournament name as the embed title, cut to Discord's limit."""
+    if len(t.name) <= TITLE_CHARS:
+        return t.name
+    return t.name[: TITLE_CHARS - len(ELLIPSIS)] + ELLIPSIS
 
 
 def data_line(t: Tournament, *, private: bool = False) -> str:
@@ -59,7 +69,7 @@ def standings(t: Tournament, view: StandingsView, *, private: bool = False) -> H
         title_line = messages.NO_COMPLETED_ROUNDS
     cut = [subtext(messages.cut_note(view.cut, view.cut_size))] if view.cut else []
     return Header(
-        title=t.name,
+        title=title(t),
         url=standings_url(t.id),
         lines=(heading(title_line), *cut, data_line(t, private=private)),
     )
@@ -73,7 +83,7 @@ def pairings(t: Tournament, view: PairingsView, *, private: bool = False) -> Hea
         else messages.pairings_header(view.round_number, view.complete)
     )
     return Header(
-        title=t.name,
+        title=title(t),
         url=tournament_url(t.id),
         lines=(heading(title_line), data_line(t, private=private)),
     )
@@ -81,7 +91,7 @@ def pairings(t: Tournament, view: PairingsView, *, private: bool = False) -> Hea
 
 def top_cut(t: Tournament, view: TopCutView, *, private: bool = False) -> Header:
     return Header(
-        title=t.name,
+        title=title(t),
         url=standings_url(t.id),
         lines=(
             heading(messages.top_cut_header(view.size, view.status)),
@@ -96,7 +106,7 @@ def players(
     """The query, escaped; notes for names that matched nobody or more players
     than shown (FR-09, FR-10)."""
     return Header(
-        title=t.name,
+        title=title(t),
         url=tournament_url(t.id),
         lines=(
             heading(messages.players_header(escape_markdown(query))),

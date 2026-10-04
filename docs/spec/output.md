@@ -11,7 +11,7 @@ Code: `formatting/image.py` (tables, pages), `formatting/bracket_image.py`, `for
 
 ## Embed text
 
-- First page: title = the tournament name (plain text; Discord does not render markdown there), title link = the tournament on Cobra (standings and top cut: the standings page; bracket: the bracket page).
+- First page: title = the tournament name, cut to 256 characters with `…` (plain text; Discord does not render markdown there), title link = the tournament on Cobra (standings and top cut: the standings page; bracket: the bracket page).
 - Description of the first page: the state line in bold (e.g. "**Round 5 pairings — in progress**", "**Standings after round 8**", "**Top cut round 6 pairings — complete**", "**Top 8 cut — finished**"); for standings, the cut note as subtext (`-#`) once Swiss is over; then "Data from <t:UNIX:R>" or the stale notice (`docs/spec/cache.md`). Notes follow (player search). The timestamp sits in the description because footers do not render Discord timestamps.
 - Later pages: no title, no description.
 - Footer of every page: a short legend ("Round 8 · 46 players", "Round 8 · 23 tables", "Round 9 · 4 games", "Top 8 · 8 players · W–L = games won and lost", "15 games · bold = winner"), plus "N / M" when there are several pages.

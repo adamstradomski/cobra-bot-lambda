@@ -31,7 +31,7 @@ from cobra_bot.domain.bracket import (
 )
 from cobra_bot.domain.models import Seat, Tournament
 from cobra_bot.formatting.embed import EMBED_COLOR, Embed, ImagePage
-from cobra_bot.formatting.header import data_line, heading
+from cobra_bot.formatting.header import data_line, heading, title
 from cobra_bot.formatting.image import (
     BACKGROUND,
     CORP,
@@ -371,7 +371,7 @@ def bracket_images(
                 data_line(t, private=private),
             ]
         ),
-        title=t.name,
+        title=title(t),
         url=bracket_url(t.id),
         footer=messages.compact_bracket_footer(games),
         color=EMBED_COLOR,

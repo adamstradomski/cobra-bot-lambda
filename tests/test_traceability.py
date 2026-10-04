@@ -10,7 +10,7 @@ text starts with "Manual".
 
 import ast
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
@@ -32,25 +32,42 @@ class TraceabilityError(ValueError):
 def requirement_rows(markdown: str) -> dict[str, str]:
     """FR/NFR ID -> status, from table rows `| ID | Priority | Requirement |
     Status |`."""
-    rows: dict[str, str] = {}
-    for line in markdown.splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 4 and re.fullmatch(r"N?FR-[0-9]{2}", cells[0]):
-            if cells[0] in rows:
-                raise TraceabilityError(f"{cells[0]} is listed twice")
-            rows[cells[0]] = cells[3]
-    return rows
+    return {
+        cells[0]: cells[3] for cells in _id_rows(markdown, r"N?FR-[0-9]{2}", columns=4)
+    }
 
 
 def acceptance_rows(markdown: str) -> dict[str, bool]:
     """AC ID -> whether it needs an automated test, from rows `| AC-xx | text |`."""
-    rows: dict[str, bool] = {}
+    return {
+        cells[0]: not cells[1].startswith("Manual")
+        for cells in _id_rows(markdown, r"AC-[0-9]{2}", columns=2)
+    }
+
+
+def _id_rows(markdown: str, id_pattern: str, *, columns: int) -> list[list[str]]:
+    """The cells of every table row whose first cell is an ID. A row with the
+    wrong number of cells (e.g. an unescaped `|` in its text) is an error, not
+    skipped, so no requirement silently drops out of the check. `\\|` is a
+    literal pipe, as in GitHub tables."""
+    rows: list[list[str]] = []
+    seen: set[str] = set()
     for line in markdown.splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 2 and re.fullmatch(r"AC-[0-9]{2}", cells[0]):
-            if cells[0] in rows:
-                raise TraceabilityError(f"{cells[0]} is listed twice")
-            rows[cells[0]] = not cells[1].startswith("Manual")
+        if not line.lstrip().startswith("|"):
+            continue
+        inner = line.strip().removeprefix("|").removesuffix("|")
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", inner)]
+        if not re.fullmatch(id_pattern, cells[0]):
+            continue
+        if len(cells) != columns:
+            raise TraceabilityError(
+                f"{cells[0]}: {len(cells)} cells, expected {columns} "
+                "(escape a | in the text as \\|)"
+            )
+        if cells[0] in seen:
+            raise TraceabilityError(f"{cells[0]} is listed twice")
+        seen.add(cells[0])
+        rows.append(cells)
     return rows
 
 
@@ -200,6 +217,28 @@ def test_a_duplicated_requirement_is_an_error() -> None:
     row = "| FR-01 | Must | x | Implemented |\n"
     with pytest.raises(TraceabilityError, match="FR-01 is listed twice"):
         requirement_rows(row * 2)
+
+
+@pytest.mark.parametrize(
+    ("parse", "row"),
+    [
+        (requirement_rows, "| FR-01 | Must | `a|b` | Implemented |\n"),
+        (requirement_rows, "| FR-01 | Must | x |\n"),
+        (acceptance_rows, "| AC-01 | given | when |\n"),
+    ],
+    ids=["unescaped-pipe", "missing-column", "extra-column"],
+)
+def test_an_id_row_with_the_wrong_columns_is_an_error(
+    parse: Callable[[str], object], row: str
+) -> None:
+    """Not skipped: a skipped row would drop its requirement from the check."""
+    with pytest.raises(TraceabilityError, match="cells, expected"):
+        parse(row)
+
+
+def test_an_escaped_pipe_stays_in_its_cell() -> None:
+    row = "| FR-01 | Must | `pairings\\|standings` | Implemented |\n"
+    assert requirement_rows(row) == {"FR-01": "Implemented"}
 
 
 def test_acceptance_rows_mark_manual_criteria() -> None:
