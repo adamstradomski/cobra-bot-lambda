@@ -13,6 +13,7 @@ from cobra_bot.domain.rounds import (
     PairingsView,
     RoundOutOfRange,
     StandingsView,
+    counted_round,
     is_pairing_complete,
     name_order,
     pairings_view,
@@ -209,6 +210,19 @@ def test_points_matching_no_round_fall_back_to_last_complete_round() -> None:
     r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
 
     assert _after_round(r1, r2, points=(5, 6)) == 2
+
+
+def test_points_matching_no_round_have_no_counted_round() -> None:
+    """The commands layer logs this case."""
+    r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
+
+    assert counted_round(_tournament(r1, r2, players=_with_points(5, 6))) is None
+
+
+def test_counted_round_is_the_round_the_points_fit() -> None:
+    r1, r2 = (_single(1, 1, 2, 3),), (_single(1, 1, 2, 3),)
+
+    assert counted_round(_tournament(r1, r2, players=_with_points(3, 3))) == 1
 
 
 def test_bye_points_count_towards_the_round() -> None:

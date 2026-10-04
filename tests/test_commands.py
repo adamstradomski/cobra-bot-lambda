@@ -2,6 +2,7 @@
 (fake fetcher, in-memory store). The Worker end-to-end tests cover the wiring."""
 
 import json
+import logging
 from collections.abc import Callable
 from datetime import timedelta
 
@@ -308,6 +309,32 @@ def test_images_are_reused_until_the_data_changes(
     later = _cache(fetcher)  # data cache refreshed (another 60 s window)
     execute(command, later, FONTS, images)
     assert len(drawn) == 2
+
+
+def _dss_with_points_off(extra: int) -> TournamentCache:
+    export = json.loads(fixture_bytes("dss"))
+    export["players"][0]["matchPoints"] += extra
+    return _cache(Fetcher({5018: json.dumps(export).encode()}))
+
+
+def test_standings_log_points_that_fit_no_round(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Points adjusted by hand: standings fall back to the last complete round
+    and say so in the log."""
+    with caplog.at_level(logging.WARNING, logger="cobra_bot.commands"):
+        run(Command("standings", "5018"), _dss_with_points_off(1))
+
+    assert "tournament 5018: match points fit no Swiss round" in caplog.text
+
+
+def test_standings_whose_points_fit_a_round_log_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="cobra_bot.commands"):
+        run(Command("standings", "5018"), _dss_with_points_off(0))
+
+    assert caplog.text == ""
 
 
 # --- top cut and bracket -----------------------------------------------------------
